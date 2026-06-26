@@ -1,0 +1,132 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  USER
+  ADMIN
+  COMPLIANCE
+}
+
+enum KYCStatus {
+  PENDING
+  IN_REVIEW
+  APPROVED
+  REJECTED
+}
+
+enum KYCLevel {
+  TIER_0
+  TIER_1
+  TIER_2
+  TIER_3
+}
+
+model User {
+  id             String         @id @default(cuid())
+  email          String         @unique
+  passwordHash   String
+  role           Role           @default(USER)
+  isActive       Boolean        @default(true)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  profile        Profile?
+  sessions       Session[]
+  refreshTokens  RefreshToken[]
+  kycRecords     KYCRecord[]
+  auditLogs      AuditLog[]
+}
+
+model Profile {
+  id             String      @id @default(cuid())
+  userId         String      @unique
+  firstName      String?
+  lastName       String?
+  phone          String?
+  dateOfBirth    DateTime?
+  country        String?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  user           User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Session {
+  id             String      @id @default(cuid())
+  userId         String
+  ipAddress      String?
+  userAgent      String?
+  expiresAt      DateTime
+  revokedAt      DateTime?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  user           User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model RefreshToken {
+  id             String      @id @default(cuid())
+  userId         String
+  sessionId      String?
+  tokenHash      String      @unique
+  expiresAt      DateTime
+  revokedAt      DateTime?
+  replacedById   String?
+  createdAt      DateTime    @default(now())
+
+  user           User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([sessionId])
+  @@index([expiresAt])
+}
+
+model KYCRecord {
+  id                  String      @id @default(cuid())
+  userId              String
+  status              KYCStatus   @default(PENDING)
+  level               KYCLevel    @default(TIER_0)
+  documentType        String?
+  documentNumber      String?
+  documentCountry     String?
+  documentFrontUrl    String?
+  documentBackUrl     String?
+  metadata            Json?
+  submittedAt         DateTime?
+  reviewedAt          DateTime?
+  reviewerId          String?
+  reviewNotes         String?
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+
+  user                User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
+  @@index([level])
+}
+
+model AuditLog {
+  id             String      @id @default(cuid())
+  userId         String?
+  action         String
+  entityType     String
+  entityId       String?
+  metadata       Json?
+  createdAt      DateTime    @default(now())
+
+  user           User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+}
