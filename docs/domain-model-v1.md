@@ -91,7 +91,7 @@ The financial identity of a verified investor. Created only after KYC reaches `A
 | `firstName` | `string` | not null | Legal name |
 | `lastName` | `string` | not null | Legal name |
 | `phone` | `string` | nullable | E.164 format |
-| `dateOfBirth` | `DateTime` (UTC date) | not null | Used for KYC age checks |
+| `dateOfBirth` | `Date` (UTC midnight) | not null | Stored as `YYYY-MM-DD 00:00:00 UTC`; time component is always midnight UTC to avoid timezone drift in age calculations |
 | `country` | `string` | not null | ISO 3166-1 alpha-2 |
 | `kycLevel` | `enum KYCLevel` | not null, default `TIER_0` | `TIER_0 \| TIER_1 \| TIER_2 \| TIER_3` |
 | `kycApprovedAt` | `DateTime` (UTC) | nullable | Set when KYC transitions to APPROVED |
