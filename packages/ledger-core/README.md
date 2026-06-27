@@ -209,6 +209,8 @@ pnpm typecheck     # TypeScript strict mode check
 | 4000 | Revenue | Revenue | CREDIT |
 | 5000 | Expenses | Expense | DEBIT |
 
+Note: `getAllAccounts()` also includes the top-level category accounts `1000` (Assets) and `2000` (Liabilities).
+
 All amounts in integer kobo (₦1,000.00 = `100_000n`).
 
 See `docs/chart-of-accounts-v1.md` for the full frozen specification.
