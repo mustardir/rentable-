@@ -213,8 +213,8 @@ An append-only, tamper-evident record of every material system action.
 | `entityType` | `string` | not null | Affected aggregate, e.g. `InvestorProfile` |
 | `entityId` | `string` | not null | ID of the affected entity |
 | `payload` | `json` | not null | Full event payload snapshot |
-| `previousHash` | `string` | nullable | SHA-256 of previous event in chain |
-| `hash` | `string` | not null | SHA-256(`sequence \| eventType \| entityId \| payload \| previousHash`) |
+| `previousHash` | `string` | nullable | SHA-256 of the previous event for the same (`entityType`, `entityId`) |
+| `hash` | `string` | not null | SHA-256(`sequence \| eventType \| entityType \| entityId \| payload \| previousHash`) |
 | `createdAt` | `DateTime` (UTC) | not null, immutable | |
 
 **Invariants**
