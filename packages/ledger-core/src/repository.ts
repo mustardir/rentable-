@@ -56,6 +56,9 @@ export class InMemoryRepository implements Repository {
     if (this.byId.has(entry.id)) {
       throw new Error(`Duplicate entry id: ${entry.id}`);
     }
+    if (this.byIdempotencyKey.has(entry.idempotencyKey)) {
+      throw new Error(`Duplicate idempotency key: ${entry.idempotencyKey}`);
+    }
     const frozen = Object.freeze({ ...entry });
     this.byId.set(entry.id, frozen);
     this.byIdempotencyKey.set(entry.idempotencyKey, frozen);
