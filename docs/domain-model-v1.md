@@ -195,7 +195,7 @@ balance(accountId) =
   - SUM(amountKobo WHERE direction = CREDIT)
 ```
 
-(Sign convention follows standard T-account rules per account normal balance.)
+(Signed balance convention: `balanceKobo = DEBIT - CREDIT`; credit-normal accounts (liabilities/equity/revenue) will have negative balances.)
 
 ---
 
