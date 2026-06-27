@@ -142,7 +142,10 @@ export class PostingEngine {
 
   /**
    * Convenience method: build and immediately persist via the repository.
-   * Checks idempotency key before writing.
+   *
+   * Note: the idempotency check here is NOT atomic; concurrent callers may still
+   * race unless the repository enforces a unique constraint on idempotencyKey
+   * (or you wrap calls with IdempotencyService.withIdempotency()).
    */
   async post(
     command: PostCommand,
