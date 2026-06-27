@@ -67,10 +67,8 @@ The authenticated identity of a platform participant.
 **Relationships**
 
 - `User` 1──1 `InvestorProfile`
-- `User` 1──N `Session`
-- `User` 1──N `RefreshToken`
-- `User` 1──N `KYCRecord`
 - `User` 1──N `AuditEvent`
+- Supporting entities (not specified in this v1 contract): `Session`, `RefreshToken`, `KYCRecord`
 
 **Invariants**
 
