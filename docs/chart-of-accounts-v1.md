@@ -233,7 +233,7 @@ WHERE jl.account_id = :accountId           -- e.g. 2100
 At all times after every `POSTED` `JournalEntry`, the following must hold:
 
 ```
-Assets (1xxx) = Liabilities (2xxx) + Equity (3xxx)
+Assets (1xxx) + Liabilities (2xxx) + Equity (3xxx) + Revenue (4xxx) + Expenses (5xxx) = 0
 ```
 
 The `PostingEngine` must validate this invariant before marking an entry as `POSTED`.
