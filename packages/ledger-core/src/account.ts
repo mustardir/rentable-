@@ -40,7 +40,8 @@ export interface AccountError {
 
 // ---------------------------------------------------------------------------
 // Canonical Chart of Accounts (v1)
-// These are the only accounts that may be referenced in journal entries.
+// Registry of accounts known to this package (see docs/chart-of-accounts-v1.md).
+// Note: PostingEngine does not currently enforce that journal lines reference only these ids.
 // ---------------------------------------------------------------------------
 
 const ACCOUNTS: readonly Account[] = [
