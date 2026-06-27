@@ -69,9 +69,15 @@ export function koboFromBigInt(value: bigint): Result<Kobo, MoneyError> {
 
 /**
  * Creates a Kobo amount from a JavaScript number.
- * Rejects floats (non-integers), zero, and negatives.
+ * Rejects floats (non-integers), unsafe integers, zero, and negatives.
  */
 export function koboFromNumber(value: number): Result<Kobo, MoneyError> {
+  if (!Number.isInteger(value)) {
+    return err({
+      kind: "FLOAT_INPUT",
+      message: `amountKobo must be an integer, got ${value}`,
+    });
+  }
   if (!Number.isSafeInteger(value)) {
     return err({
       kind: "FLOAT_INPUT",

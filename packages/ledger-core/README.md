@@ -27,7 +27,7 @@ Pure-TypeScript double-entry ledger core for Fortress Fund Phase 2.
 
 | Rule | How it is enforced |
 |------|--------------------|
-| **Integer money** | `Kobo` is a branded `bigint`; `koboFromNumber()` rejects non-integers |
+| **Integer money** | `Kobo` is a branded `bigint`; `koboFromNumber()` rejects non-safe-integers |
 | **amountKobo > 0** | `koboFromBigInt` / `koboFromNumber` reject zero and negative values |
 | **Σ(debits) == Σ(credits)** | `PostingEngine.buildEntry()` rejects unbalanced entries |
 | **Append-only journals** | `InMemoryRepository.saveEntry()` throws on duplicate id; no update/delete methods |
@@ -201,15 +201,15 @@ pnpm typecheck     # TypeScript strict mode check
 
 | Code | Name | Type | Normal Balance |
 |------|------|------|---------------|
+| 1000 | Assets | Asset | DEBIT |
 | 1100 | Investor Cash | Asset | DEBIT |
 | 1200 | Settlement Account | Asset | DEBIT |
+| 2000 | Liabilities | Liability | CREDIT |
 | 2100 | Customer Deposits | Liability | CREDIT |
 | 2200 | Product Obligations | Liability | CREDIT |
 | 3000 | Equity | Equity | CREDIT |
 | 4000 | Revenue | Revenue | CREDIT |
 | 5000 | Expenses | Expense | DEBIT |
-
-Note: `getAllAccounts()` also includes the top-level category accounts `1000` (Assets) and `2000` (Liabilities).
 
 All amounts in integer kobo (₦1,000.00 = `100_000n`).
 

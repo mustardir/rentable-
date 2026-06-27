@@ -38,6 +38,12 @@ describe("koboFromNumber", () => {
     if (result.ok) expect(result.value).toBe(100_000n);
   });
 
+  it("rejects integers above Number.MAX_SAFE_INTEGER", () => {
+    const result = koboFromNumber(Number.MAX_SAFE_INTEGER + 1);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.message).toContain("safe integer");
+  });
+
   it("rejects NaN", () => {
     const result = koboFromNumber(NaN);
     expect(result.ok).toBe(false);

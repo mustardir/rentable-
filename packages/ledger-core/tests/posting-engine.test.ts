@@ -160,6 +160,19 @@ describe("PostingEngine.buildEntry", () => {
     expect(result.ok).toBe(true);
   });
 
+  it("rejects unsafe integer number amountKobo", () => {
+    const unsafeAmount = Number.MAX_SAFE_INTEGER + 1;
+    const result = engine.buildEntry({
+      idempotencyKey: "test-unsafe-number",
+      lines: [
+        { accountId: "acct_1100", direction: "DEBIT", amountKobo: unsafeAmount },
+        { accountId: "acct_2100", direction: "CREDIT", amountKobo: unsafeAmount },
+      ],
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.message).toContain("safe integer");
+  });
+
   it("entry has UTC postedAt timestamp", () => {
     const before = new Date();
     const result = engine.buildEntry({
