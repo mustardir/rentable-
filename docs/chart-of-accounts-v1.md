@@ -203,7 +203,7 @@ Original entry DR/CR → Reversal entry CR/DR  (mirrored)
 
 ## Balance Derivation Rules
 
-Balances are **never stored**. They are always computed from `JournalLine` records.
+Balances are **never stored**. They are always computed from `JournalLine` records as a **signed** balance (`DEBIT - CREDIT`).
 
 ```sql
 -- Account balance
