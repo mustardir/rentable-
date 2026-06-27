@@ -237,8 +237,7 @@ Assets (1xxx) + Liabilities (2xxx) + Equity (3xxx) + Revenue (4xxx) + Expenses (
 ```
 
 The `PostingEngine` must validate this invariant before marking an entry as `POSTED`.
-The `PostingEngine` is a pure-TypeScript service defined in `packages/ledger-core`
-(PR #2). It is the sole authority for writing `JournalEntry` and `JournalLine` records
+The `PostingEngine` (introduced in PR #2: `feat(ledger-core)`) is the sole authority for writing `JournalEntry` and `JournalLine` records
 and enforces double-entry balance, integer money, and UTC timestamp rules at the point
 of write.
 
