@@ -72,10 +72,10 @@ export function koboFromBigInt(value: bigint): Result<Kobo, MoneyError> {
  * Rejects floats (non-integers), zero, and negatives.
  */
 export function koboFromNumber(value: number): Result<Kobo, MoneyError> {
-  if (!Number.isInteger(value)) {
+  if (!Number.isSafeInteger(value)) {
     return err({
       kind: "FLOAT_INPUT",
-      message: `amountKobo must be an integer, got ${value}`,
+      message: `amountKobo must be a safe integer, got ${value}`,
     });
   }
   if (value <= 0) {
