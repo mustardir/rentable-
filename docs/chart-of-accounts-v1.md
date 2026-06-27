@@ -76,7 +76,7 @@ Represent obligations owed to investors or counterparties.
 - **Credited** when a deposit is received (offsetting DR 1100 Investor Cash).
 - **Debited** when an investor's funds are deployed into a product or withdrawn.
 - Represents Fortress Fund's obligation to return uninvested cash to investors.
-- Must always balance with 1100 on a fund-wide basis.
+- Must always be equal in magnitude and opposite in sign to 1100 on a fund-wide basis (given signed balance convention `DEBIT - CREDIT`).
 
 #### 2200 – Product Obligations
 
