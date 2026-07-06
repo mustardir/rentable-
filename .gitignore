@@ -10,3 +10,8 @@ dist
 *.db
 .beads-credential-key
 .beads/proxieddb/
+
+# Tooling / IDE / generated lockfiles from non-project package managers
+.codeam/
+package-lock.json
+yarn.lock

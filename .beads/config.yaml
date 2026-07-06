@@ -68,3 +68,5 @@
 sync.remote: "git+https://github.com/mustardir/rentable-"
 dolt:
     shared-server: true
+export:
+    auto: true
