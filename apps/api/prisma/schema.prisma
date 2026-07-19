@@ -28,62 +28,62 @@ enum KYCLevel {
 }
 
 model User {
-  id             String         @id @default(cuid())
-  email          String         @unique
-  passwordHash   String
-  role           Role           @default(USER)
-  isActive       Boolean        @default(true)
-  createdAt      DateTime       @default(now())
-  updatedAt      DateTime       @updatedAt
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  role         Role     @default(USER)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
-  profile        Profile?
-  sessions       Session[]
-  refreshTokens  RefreshToken[]
-  kycRecords     KYCRecord[]
-  auditLogs      AuditLog[]
+  profile       Profile?
+  sessions      Session[]
+  refreshTokens RefreshToken[]
+  kycRecords    KYCRecord[]
+  auditLogs     AuditLog[]
 }
 
 model Profile {
-  id             String      @id @default(cuid())
-  userId         String      @unique
-  firstName      String?
-  lastName       String?
-  phone          String?
-  dateOfBirth    DateTime?
-  country        String?
-  createdAt      DateTime    @default(now())
-  updatedAt      DateTime    @updatedAt
+  id          String    @id @default(cuid())
+  userId      String    @unique
+  firstName   String?
+  lastName    String?
+  phone       String?
+  dateOfBirth DateTime?
+  country     String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
-  user           User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Session {
-  id             String      @id @default(cuid())
-  userId         String
-  ipAddress      String?
-  userAgent      String?
-  expiresAt      DateTime
-  revokedAt      DateTime?
-  createdAt      DateTime    @default(now())
-  updatedAt      DateTime    @updatedAt
+  id        String    @id @default(cuid())
+  userId    String
+  ipAddress String?
+  userAgent String?
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 
-  user           User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([expiresAt])
 }
 
 model RefreshToken {
-  id             String      @id @default(cuid())
-  userId         String
-  sessionId      String?
-  tokenHash      String      @unique
-  expiresAt      DateTime
-  revokedAt      DateTime?
-  replacedById   String?
-  createdAt      DateTime    @default(now())
+  id           String    @id @default(cuid())
+  userId       String
+  sessionId    String?
+  tokenHash    String    @unique
+  expiresAt    DateTime
+  revokedAt    DateTime?
+  replacedById String?
+  createdAt    DateTime  @default(now())
 
-  user           User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([sessionId])
@@ -91,24 +91,24 @@ model RefreshToken {
 }
 
 model KYCRecord {
-  id                  String      @id @default(cuid())
-  userId              String
-  status              KYCStatus   @default(PENDING)
-  level               KYCLevel    @default(TIER_0)
-  documentType        String?
-  documentNumber      String?
-  documentCountry     String?
-  documentFrontUrl    String?
-  documentBackUrl     String?
-  metadata            Json?
-  submittedAt         DateTime?
-  reviewedAt          DateTime?
-  reviewerId          String?
-  reviewNotes         String?
-  createdAt           DateTime    @default(now())
-  updatedAt           DateTime    @updatedAt
+  id               String    @id @default(cuid())
+  userId           String
+  status           KYCStatus @default(PENDING)
+  level            KYCLevel  @default(TIER_0)
+  documentType     String?
+  documentNumber   String?
+  documentCountry  String?
+  documentFrontUrl String?
+  documentBackUrl  String?
+  metadata         Json?
+  submittedAt      DateTime?
+  reviewedAt       DateTime?
+  reviewerId       String?
+  reviewNotes      String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
-  user                User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([status])
@@ -116,15 +116,15 @@ model KYCRecord {
 }
 
 model AuditLog {
-  id             String      @id @default(cuid())
-  userId         String?
-  action         String
-  entityType     String
-  entityId       String?
-  metadata       Json?
-  createdAt      DateTime    @default(now())
+  id         String   @id @default(cuid())
+  userId     String?
+  action     String
+  entityType String
+  entityId   String?
+  metadata   Json?
+  createdAt  DateTime @default(now())
 
-  user           User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([userId])
   @@index([entityType, entityId])
@@ -136,69 +136,94 @@ model AuditLog {
 // ==========================
 
 model Ledger {
-  id          String    @id @default(cuid())
-  name        String
-  metadata    Json?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id        String   @id @default(cuid())
+  name      String
+  metadata  Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  balances    Balance[]
+  balances Balance[]
+}
+
+enum AccountType {
+  CHECKING
+  SAVINGS
+  LOAN
+  CASH_VAULT
+  INTEREST_EXPENSE
+  INTEREST_INCOME
+  FEE_INCOME
+}
+
+enum AccountStatus {
+  ACTIVE
+  FROZEN
+  CLOSED
+  DORMANT
 }
 
 model Balance {
-  id              String    @id @default(cuid())
-  ledgerId        String
-  ledger          Ledger    @relation(fields: [ledgerId], references: [id])
+  id       String @id @default(cuid())
+  ledgerId String
+  ledger   Ledger @relation(fields: [ledgerId], references: [id])
 
-  identityId      String?
-  identity        Identity? @relation(fields: [identityId], references: [id])
+  identityId String?
+  identity   Identity? @relation(fields: [identityId], references: [id])
 
-  currency        String
-  balance         BigInt    @default(0)
-  creditBalance   BigInt    @default(0)
-  debitBalance    BigInt    @default(0)
-  inflightCredit  BigInt    @default(0)
-  inflightDebit   BigInt    @default(0)
+  accountType   AccountType   @default(CHECKING)
+  accountStatus AccountStatus @default(ACTIVE)
+  accountNumber String?       @unique
 
-  metadata        Json?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  interestRateBps Int?
 
-  entries         LedgerEntry[]
+  currency       String
+  balance        BigInt @default(0)
+  creditBalance  BigInt @default(0)
+  debitBalance   BigInt @default(0)
+  inflightCredit BigInt @default(0)
+  inflightDebit  BigInt @default(0)
+
+  metadata  Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  entries LedgerEntry[]
 
   @@index([identityId])
   @@index([currency])
+  @@index([accountType])
+  @@index([accountNumber])
 }
 
 model Transaction {
-  id            String        @id @default(cuid())
-  reference     String        @unique
-  description   String?
-  status        TxStatus      @default(PENDING)
-  amount        BigInt
-  currency      String
+  id          String   @id @default(cuid())
+  reference   String   @unique
+  description String?
+  status      TxStatus @default(PENDING)
+  amount      BigInt
+  currency    String
 
-  scheduledFor  DateTime?
-  metadata      Json?
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
+  scheduledFor DateTime?
+  metadata     Json?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
-  entries       LedgerEntry[]
+  entries LedgerEntry[]
 }
 
 model LedgerEntry {
-  id            String      @id @default(cuid())
+  id String @id @default(cuid())
 
   transactionId String
   transaction   Transaction @relation(fields: [transactionId], references: [id])
 
-  balanceId     String
-  balance       Balance     @relation(fields: [balanceId], references: [id])
+  balanceId String
+  balance   Balance @relation(fields: [balanceId], references: [id])
 
-  direction     EntryDirection
-  amount        BigInt
+  direction EntryDirection
+  amount    BigInt
 
-  createdAt     DateTime    @default(now())
+  createdAt DateTime @default(now())
 
   @@index([transactionId])
   @@index([balanceId])
@@ -218,16 +243,16 @@ enum EntryDirection {
 }
 
 model Identity {
-  id          String    @id @default(cuid())
-  userId      String    @unique
-  firstName   String?
-  lastName    String?
-  email       String?
-  phone       String?
-  metadata    Json?
+  id        String  @id @default(cuid())
+  userId    String  @unique
+  firstName String?
+  lastName  String?
+  email     String?
+  phone     String?
+  metadata  Json?
 
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  balances    Balance[]
+  balances Balance[]
 }
