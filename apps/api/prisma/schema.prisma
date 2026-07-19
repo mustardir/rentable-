@@ -130,3 +130,104 @@ model AuditLog {
   @@index([entityType, entityId])
   @@index([createdAt])
 }
+
+// ==========================
+// LEDGER CORE
+// ==========================
+
+model Ledger {
+  id          String    @id @default(cuid())
+  name        String
+  metadata    Json?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  balances    Balance[]
+}
+
+model Balance {
+  id              String    @id @default(cuid())
+  ledgerId        String
+  ledger          Ledger    @relation(fields: [ledgerId], references: [id])
+
+  identityId      String?
+  identity        Identity? @relation(fields: [identityId], references: [id])
+
+  currency        String
+  balance         BigInt    @default(0)
+  creditBalance   BigInt    @default(0)
+  debitBalance    BigInt    @default(0)
+  inflightCredit  BigInt    @default(0)
+  inflightDebit   BigInt    @default(0)
+
+  metadata        Json?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  entries         LedgerEntry[]
+
+  @@index([identityId])
+  @@index([currency])
+}
+
+model Transaction {
+  id            String        @id @default(cuid())
+  reference     String        @unique
+  description   String?
+  status        TxStatus      @default(PENDING)
+  amount        BigInt
+  currency      String
+
+  scheduledFor  DateTime?
+  metadata      Json?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  entries       LedgerEntry[]
+}
+
+model LedgerEntry {
+  id            String      @id @default(cuid())
+
+  transactionId String
+  transaction   Transaction @relation(fields: [transactionId], references: [id])
+
+  balanceId     String
+  balance       Balance     @relation(fields: [balanceId], references: [id])
+
+  direction     EntryDirection
+  amount        BigInt
+
+  createdAt     DateTime    @default(now())
+
+  @@index([transactionId])
+  @@index([balanceId])
+}
+
+enum TxStatus {
+  PENDING
+  INFLIGHT
+  APPLIED
+  REJECTED
+  REVERSED
+}
+
+enum EntryDirection {
+  DEBIT
+  CREDIT
+}
+
+model Identity {
+  id          String    @id @default(cuid())
+  userId      String    @unique
+  firstName   String?
+  lastName    String?
+  email       String?
+  phone       String?
+  metadata    Json?
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  balances    Balance[]
+}
