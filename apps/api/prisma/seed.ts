@@ -1,4 +1,4 @@
-import { PrismaClient, Role, KYCLevel, KYCStatus } from '@prisma/client';
+import { AccountType, Direction, PrismaClient, Role, KYCLevel, KYCStatus } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
@@ -88,6 +88,39 @@ async function main() {
     ],
     skipDuplicates: true,
   });
+
+
+  const accounts = [
+    { id: 'acct_1000', code: '1000', name: 'Assets', type: AccountType.ASSET, normalBalance: Direction.DEBIT, description: 'Top-level asset category' },
+    { id: 'acct_1100', code: '1100', name: 'Investor Cash', type: AccountType.ASSET, normalBalance: Direction.DEBIT, description: 'Cash held on behalf of investors; funded by inbound deposits' },
+    { id: 'acct_1200', code: '1200', name: 'Settlement Account', type: AccountType.ASSET, normalBalance: Direction.DEBIT, description: 'Funds in transit during payment settlement' },
+    { id: 'acct_2000', code: '2000', name: 'Liabilities', type: AccountType.LIABILITY, normalBalance: Direction.CREDIT, description: 'Top-level liability category' },
+    { id: 'acct_2100', code: '2100', name: 'Customer Deposits', type: AccountType.LIABILITY, normalBalance: Direction.CREDIT, description: 'Investor cash balances held in custody' },
+    { id: 'acct_2200', code: '2200', name: 'Product Obligations', type: AccountType.LIABILITY, normalBalance: Direction.CREDIT, description: 'Capital committed to active investment products' },
+    { id: 'acct_3000', code: '3000', name: 'Equity', type: AccountType.EQUITY, normalBalance: Direction.CREDIT, description: 'Top-level equity category' },
+    { id: 'acct_4000', code: '4000', name: 'Revenue', type: AccountType.REVENUE, normalBalance: Direction.CREDIT, description: 'Top-level revenue category' },
+    { id: 'acct_5000', code: '5000', name: 'Expenses', type: AccountType.EXPENSE, normalBalance: Direction.DEBIT, description: 'Top-level expense category' },
+  ];
+
+  for (const account of accounts) {
+    await prisma.account.upsert({
+      where: { code: account.code },
+      update: {
+        name: account.name,
+        type: account.type,
+        normalBalance: account.normalBalance,
+        metadata: { description: account.description, source: 'chart-of-accounts-v1' },
+      },
+      create: {
+        id: account.id,
+        code: account.code,
+        name: account.name,
+        type: account.type,
+        normalBalance: account.normalBalance,
+        metadata: { description: account.description, source: 'chart-of-accounts-v1' },
+      },
+    });
+  }
 
   await prisma.auditLog.createMany({
     data: [

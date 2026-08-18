@@ -101,6 +101,22 @@ describe("PostingEngine.buildEntry", () => {
     if (!result.ok) expect(result.error.kind).toBe("FLOAT_INPUT");
   });
 
+  it("rejects invalid directions", () => {
+    const result = engine.buildEntry({
+      idempotencyKey: "test-invalid-direction",
+      lines: [
+        { accountId: "acct_1100", direction: "DEBIT", amountKobo: 100_000n },
+        {
+          accountId: "acct_2100",
+          direction: "WITHDRAW" as "CREDIT",
+          amountKobo: 100_000n,
+        },
+      ],
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.kind).toBe("INVALID_DIRECTION");
+  });
+
   it("rejects zero amountKobo", () => {
     const result = engine.buildEntry({
       idempotencyKey: "test-zero",
