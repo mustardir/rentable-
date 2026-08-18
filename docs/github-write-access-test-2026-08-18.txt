@@ -1,3 +1,0 @@
-GitHub write-access verification test.
-
-Created by the connected GitHub integration on 2026-08-18.
