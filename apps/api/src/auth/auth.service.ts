@@ -3,7 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import * as bcrypt from 'bcryptjs';
 import { JwtService } from '@nestjs/jwt';
 import { randomUUID } from 'crypto';
-import { JWT_REFRESH_SECRET, REFRESH_TOKEN_EXPIRES_IN, ACCESS_TOKEN_EXPIRES_IN } from './constants';
+import { JWT_REFRESH_SECRET, REFRESH_TOKEN_EXPIRES_IN } from './constants';
 import { validatePasswordPolicy } from './password-policy';
 import * as jwt from 'jsonwebtoken';
 
@@ -50,7 +50,7 @@ export class AuthService {
     return 30 * 24 * 60 * 60 * 1000;
   }
 
-  private async createAndStoreRefreshToken(userId: string, sessionId?: string): Promise<{ refreshJwt: string; tokenId: string }>{
+  private async createAndStoreRefreshToken(userId: string, sessionId?: string, tx?: any): Promise<{ refreshJwt: string; tokenId: string }> {
     const tokenId = randomUUID();
     const payload = { sub: userId };
     const refreshJwt = jwt.sign(payload, JWT_REFRESH_SECRET, { jwtid: tokenId, expiresIn: REFRESH_TOKEN_EXPIRES_IN });
@@ -58,7 +58,9 @@ export class AuthService {
 
     const expiresAt = new Date(Date.now() + this.parseExpiryMs(REFRESH_TOKEN_EXPIRES_IN));
 
-    await this.prisma.refreshToken.create({
+    const client = tx ?? this.prisma;
+
+    await client.refreshToken.create({
       data: {
         id: tokenId,
         userId,
@@ -90,24 +92,31 @@ export class AuthService {
 
   async refresh(oldRefreshJwt: string) {
     try {
-      const decoded = jwt.verify(oldRefreshJwt, JWT_REFRESH_SECRET) as any;
-      const tokenId = decoded?.jti || decoded?.jti;
-      if (!tokenId) throw new UnauthorizedException('Invalid token');
+      // Atomic rotation inside a single transaction
+      const result = await this.prisma.$transaction(async (tx) => {
+        const decoded = jwt.verify(oldRefreshJwt, JWT_REFRESH_SECRET) as any;
+        const tokenId = decoded?.jti;
+        if (!tokenId) throw new UnauthorizedException('Invalid token');
 
-      const dbToken = await this.prisma.refreshToken.findUnique({ where: { id: tokenId } });
-      if (!dbToken) throw new UnauthorizedException('Invalid token');
-      if (dbToken.revokedAt) throw new UnauthorizedException('Token revoked');
-      if (dbToken.expiresAt && dbToken.expiresAt.getTime() < Date.now()) throw new UnauthorizedException('Token expired');
+        const dbToken = await tx.refreshToken.findUnique({ where: { id: tokenId } });
+        if (!dbToken) throw new UnauthorizedException('Invalid token');
+        if (dbToken.revokedAt) throw new UnauthorizedException('Token revoked');
+        if (dbToken.expiresAt && dbToken.expiresAt.getTime() < Date.now()) throw new UnauthorizedException('Token expired');
 
-      const match = await bcrypt.compare(oldRefreshJwt, dbToken.tokenHash);
-      if (!match) throw new UnauthorizedException('Invalid token');
+        const match = await bcrypt.compare(oldRefreshJwt, dbToken.tokenHash);
+        if (!match) throw new UnauthorizedException('Invalid token');
 
-      // rotate: create new refresh token and mark old replaced
-      const { refreshJwt: newRefresh, tokenId: newTokenId } = await this.createAndStoreRefreshToken(dbToken.userId, dbToken.sessionId ?? undefined);
-      await this.prisma.refreshToken.update({ where: { id: dbToken.id }, data: { replacedById: newTokenId, revokedAt: new Date() } });
+        // create new refresh token within same transaction
+        const { refreshJwt: newRefresh, tokenId: newTokenId } = await this.createAndStoreRefreshToken(dbToken.userId, dbToken.sessionId ?? undefined, tx);
 
-      const accessToken = await this.signAccessToken(dbToken.userId);
-      return { accessToken, refreshToken: newRefresh };
+        // mark the old token revoked and replaced
+        await tx.refreshToken.update({ where: { id: dbToken.id }, data: { replacedById: newTokenId, revokedAt: new Date() } });
+
+        const accessToken = await this.signAccessToken(dbToken.userId);
+        return { accessToken, refreshToken: newRefresh };
+      });
+
+      return result;
     } catch (err) {
       throw new UnauthorizedException('Invalid token');
     }
