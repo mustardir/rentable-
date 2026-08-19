@@ -34,6 +34,10 @@ function utcNow(): Date {
   return new Date(Date.now());
 }
 
+function isDirection(value: string): value is Direction {
+  return value === "DEBIT" || value === "CREDIT";
+}
+
 function parseAmountKobo(
   raw: bigint | number
 ): Result<Kobo, JournalError> {
@@ -89,6 +93,13 @@ export class PostingEngine {
     const parsedLines: JournalLine[] = [];
 
     for (const raw of rawLines) {
+      if (!isDirection(raw.direction)) {
+        return err({
+          kind: "INVALID_DIRECTION",
+          message: `direction must be either DEBIT or CREDIT, got ${raw.direction}`,
+        });
+      }
+
       const amountResult = parseAmountKobo(raw.amountKobo);
       if (!amountResult.ok) {
         return err(amountResult.error);
@@ -99,7 +110,7 @@ export class PostingEngine {
           id: randomUUID(),
           journalEntryId: entryId,
           accountId: raw.accountId,
-          direction: raw.direction as Direction,
+          direction: raw.direction,
           amountKobo: amountResult.value,
           metadata: Object.freeze({ ...(raw.metadata ?? {}) }),
           createdAt: now,

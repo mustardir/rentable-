@@ -20,7 +20,8 @@
     "@prisma/client": "^5.22.0",
     "bcryptjs": "^2.4.3",
     "reflect-metadata": "^0.2.2",
-    "rxjs": "^7.8.1"
+    "rxjs": "^7.8.1",
+    "@fortress/ledger-core": "workspace:*"
   },
   "devDependencies": {
     "@nestjs/cli": "^10.4.8",
