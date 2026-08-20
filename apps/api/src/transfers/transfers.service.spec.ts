@@ -16,11 +16,12 @@ describe('TransfersService ledger integration', () => {
       },
     };
 
+    type TxClient = typeof tx;
     const prisma = {
       transfer: {
         findUnique: jest.fn().mockResolvedValue(null),
       },
-      $transaction: jest.fn(async (callback: (tx: typeof tx) => unknown) => callback(tx)),
+      $transaction: jest.fn(async (callback: (client: TxClient) => unknown) => callback(tx)),
     };
 
     return { prisma, tx };
@@ -78,6 +79,9 @@ describe('TransfersService ledger integration', () => {
         metadata: expect.objectContaining({ investorId: 'user-b' }),
       }),
     ]);
+
+    expect(result.journalEntry).toBeDefined();
+    if (!result.journalEntry) throw new Error('Expected journalEntry to be returned');
     expect(result.journalEntry.lines).toHaveLength(2);
     expect(result.journalEntry.lines[0].amountKobo).toBe(10000n);
     expect(result.journalEntry.lines[1].amountKobo).toBe(10000n);
