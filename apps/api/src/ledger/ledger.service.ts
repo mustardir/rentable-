@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { BalanceService, type JournalEntryStatus } from '@fortress/ledger-core';
+import { BalanceService, koboFromBigInt, type JournalEntryStatus } from '@fortress/ledger-core';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
@@ -22,15 +22,21 @@ export class LedgerService {
       id: entry.id,
       idempotencyKey: entry.idempotencyKey,
       status: entry.status as JournalEntryStatus,
-      lines: entry.lines.map((line) => ({
-        id: line.id,
-        journalEntryId: line.journalEntryId,
-        accountId: line.accountId,
-        direction: line.direction,
-        amountKobo: line.amountKobo,
-        metadata: {},
-        createdAt: line.createdAt,
-      })),
+      lines: entry.lines.map((line) => {
+        const amount = koboFromBigInt(line.amountKobo);
+        if (!amount.ok) {
+          throw new Error(`INVALID_LEDGER_AMOUNT:${amount.error.kind}`);
+        }
+        return {
+          id: line.id,
+          journalEntryId: line.journalEntryId,
+          accountId: line.accountId,
+          direction: line.direction,
+          amountKobo: amount.value,
+          metadata: {},
+          createdAt: line.createdAt,
+        };
+      }),
       postedAt: entry.postedAt,
       reversalOfId: entry.reversalOfId ?? undefined,
       reversedById: entry.reversedById ?? undefined,
