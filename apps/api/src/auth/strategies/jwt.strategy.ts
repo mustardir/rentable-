@@ -1,20 +1,18 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
-import { JWT_ACCESS_SECRET } from '../constants';
+import { JWT_ACCESS_SECRET, assertJwtConfiguration } from '../constants';
 import { PrismaService } from '../../prisma/prisma.service';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor(private readonly prisma: PrismaService) {
-    if (!JWT_ACCESS_SECRET) {
-      throw new Error('JWT_SECRET must be set');
-    }
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
-      secretOrKey: JWT_ACCESS_SECRET,
+      secretOrKey: JWT_ACCESS_SECRET ?? '',
     });
+    assertJwtConfiguration();
   }
 
   async validate(payload: { sub?: string }) {
