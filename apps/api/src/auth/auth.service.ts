@@ -6,7 +6,10 @@ import { JwtService } from '@nestjs/jwt';
 import { randomUUID } from 'crypto';
 import { JWT_REFRESH_SECRET, REFRESH_TOKEN_EXPIRES_IN, assertJwtConfiguration } from './constants';
 import { validatePasswordPolicy } from './password-policy';
-import * as jwt from 'jsonwebtoken';
+
+// jsonwebtoken is intentionally loaded as untyped runtime code so the existing lockfile remains unchanged.
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const jwt = require('jsonwebtoken');
 
 @Injectable()
 export class AuthService {
@@ -68,7 +71,7 @@ export class AuthService {
     const tokenId = randomUUID();
     const refreshJwt = jwt.sign(
       { sub: userId },
-      JWT_REFRESH_SECRET!,
+      JWT_REFRESH_SECRET,
       { jwtid: tokenId, expiresIn: REFRESH_TOKEN_EXPIRES_IN },
     );
     const tokenHash = await bcrypt.hash(refreshJwt, 12);
@@ -117,8 +120,8 @@ export class AuthService {
 
     try {
       return await this.prisma.$transaction(async (tx) => {
-        const decoded = jwt.verify(oldRefreshJwt, JWT_REFRESH_SECRET!) as jwt.JwtPayload;
-        const tokenId = decoded.jti;
+        const decoded = jwt.verify(oldRefreshJwt, JWT_REFRESH_SECRET);
+        const tokenId = decoded?.jti;
         if (!tokenId) throw new UnauthorizedException('Invalid token');
 
         const dbToken = await tx.refreshToken.findUnique({ where: { id: tokenId } });
@@ -182,8 +185,8 @@ export class AuthService {
 
     try {
       assertJwtConfiguration();
-      const decoded = jwt.verify(refreshJwt, JWT_REFRESH_SECRET!) as jwt.JwtPayload;
-      const tokenId = decoded.jti;
+      const decoded = jwt.verify(refreshJwt, JWT_REFRESH_SECRET);
+      const tokenId = decoded?.jti;
       if (!tokenId) return { success: true };
 
       await this.prisma.$transaction(async (tx) => {
