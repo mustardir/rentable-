@@ -1,9 +1,10 @@
 import { Injectable, UnauthorizedException, BadRequestException } from '@nestjs/common';
+import { Prisma, PrismaClient } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import * as bcrypt from 'bcryptjs';
 import { JwtService } from '@nestjs/jwt';
 import { randomUUID } from 'crypto';
-import { JWT_REFRESH_SECRET, REFRESH_TOKEN_EXPIRES_IN } from './constants';
+import { JWT_REFRESH_SECRET, REFRESH_TOKEN_EXPIRES_IN, assertJwtConfiguration } from './constants';
 import { validatePasswordPolicy } from './password-policy';
 import * as jwt from 'jsonwebtoken';
 
@@ -20,54 +21,62 @@ export class AuthService {
     if (existing) throw new BadRequestException('Registration failed');
 
     const passwordHash = await bcrypt.hash(password, 12);
-    const user = await this.prisma.user.create({ data: { email, passwordHash, profile: { create: { firstName: name ?? '' } } } });
+    const user = await this.prisma.user.create({
+      data: {
+        email,
+        passwordHash,
+        profile: { create: { firstName: name ?? '' } },
+      },
+    });
 
     return { id: user.id, email: user.email };
   }
 
   async validateUser(email: string, password: string) {
     const user = await this.prisma.user.findUnique({ where: { email } });
-    if (!user) return null;
+    if (!user || !user.isActive) return null;
+
     const ok = await bcrypt.compare(password, user.passwordHash);
     if (!ok) return null;
-    const { passwordHash, ...safe } = user as any;
+
+    const { passwordHash: _passwordHash, ...safe } = user;
     return safe;
   }
 
   private signAccessToken(userId: string) {
+    assertJwtConfiguration();
     return this.jwtService.signAsync({ sub: userId });
   }
 
   private parseExpiryMs(spec: string) {
-    if (/^\d+m$/.test(spec)) {
-      const m = parseInt(spec.slice(0, -1), 10);
-      return m * 60 * 1000;
-    }
-    if (/^\d+d$/.test(spec)) {
-      const d = parseInt(spec.slice(0, -1), 10);
-      return d * 24 * 60 * 60 * 1000;
-    }
-    return 30 * 24 * 60 * 60 * 1000;
+    const match = /^(\d+)([mhd])$/.exec(spec);
+    if (!match) return 30 * 24 * 60 * 60 * 1000;
+
+    const value = Number(match[1]);
+    if (match[2] === 'm') return value * 60 * 1000;
+    if (match[2] === 'h') return value * 60 * 60 * 1000;
+    return value * 24 * 60 * 60 * 1000;
   }
 
-  private async createAndStoreRefreshToken(userId: string, sessionId?: string, tx?: any): Promise<{ refreshJwt: string; tokenId: string }> {
+  private async createAndStoreRefreshToken(
+    userId: string,
+    sessionId: string,
+    tx?: Prisma.TransactionClient,
+  ): Promise<{ refreshJwt: string; tokenId: string }> {
+    assertJwtConfiguration();
+
     const tokenId = randomUUID();
-    const payload = { sub: userId };
-    const refreshJwt = jwt.sign(payload, JWT_REFRESH_SECRET, { jwtid: tokenId, expiresIn: REFRESH_TOKEN_EXPIRES_IN });
+    const refreshJwt = jwt.sign(
+      { sub: userId },
+      JWT_REFRESH_SECRET!,
+      { jwtid: tokenId, expiresIn: REFRESH_TOKEN_EXPIRES_IN },
+    );
     const tokenHash = await bcrypt.hash(refreshJwt, 12);
-
     const expiresAt = new Date(Date.now() + this.parseExpiryMs(REFRESH_TOKEN_EXPIRES_IN));
-
     const client = tx ?? this.prisma;
 
     await client.refreshToken.create({
-      data: {
-        id: tokenId,
-        userId,
-        sessionId: sessionId ?? undefined,
-        tokenHash,
-        expiresAt,
-      },
+      data: { id: tokenId, userId, sessionId, tokenHash, expiresAt },
     });
 
     return { refreshJwt, tokenId };
@@ -75,62 +84,133 @@ export class AuthService {
 
   async login(email: string, password: string, ip?: string, userAgent?: string) {
     const user = await this.prisma.user.findUnique({ where: { email } });
-    if (!user) throw new UnauthorizedException('Invalid credentials');
+    if (!user || !user.isActive) throw new UnauthorizedException('Invalid credentials');
+
     const ok = await bcrypt.compare(password, user.passwordHash);
     if (!ok) throw new UnauthorizedException('Invalid credentials');
 
-    // session expiry aligned to refresh token expiry by default
-    const sessionExpiryMs = this.parseExpiryMs(process.env.SESSION_EXPIRES || REFRESH_TOKEN_EXPIRES_IN);
+    const sessionExpiryMs = this.parseExpiryMs(
+      process.env.SESSION_EXPIRES || REFRESH_TOKEN_EXPIRES_IN,
+    );
 
-    const session = await this.prisma.session.create({ data: { userId: user.id, expiresAt: new Date(Date.now() + sessionExpiryMs), ipAddress: ip, userAgent } });
+    const session = await this.prisma.session.create({
+      data: {
+        userId: user.id,
+        expiresAt: new Date(Date.now() + sessionExpiryMs),
+        ipAddress: ip,
+        userAgent,
+      },
+    });
 
     const accessToken = await this.signAccessToken(user.id);
     const { refreshJwt } = await this.createAndStoreRefreshToken(user.id, session.id);
 
-    return { accessToken, refreshToken: refreshJwt, user: { id: user.id, email: user.email } };
+    return {
+      accessToken,
+      refreshToken: refreshJwt,
+      user: { id: user.id, email: user.email, role: user.role },
+    };
   }
 
   async refresh(oldRefreshJwt: string) {
+    assertJwtConfiguration();
+
     try {
-      // Atomic rotation inside a single transaction
-      const result = await this.prisma.$transaction(async (tx) => {
-        const decoded = jwt.verify(oldRefreshJwt, JWT_REFRESH_SECRET) as any;
-        const tokenId = decoded?.jti;
+      return await this.prisma.$transaction(async (tx) => {
+        const decoded = jwt.verify(oldRefreshJwt, JWT_REFRESH_SECRET!) as jwt.JwtPayload;
+        const tokenId = decoded.jti;
         if (!tokenId) throw new UnauthorizedException('Invalid token');
 
         const dbToken = await tx.refreshToken.findUnique({ where: { id: tokenId } });
         if (!dbToken) throw new UnauthorizedException('Invalid token');
-        if (dbToken.revokedAt) throw new UnauthorizedException('Token revoked');
-        if (dbToken.expiresAt && dbToken.expiresAt.getTime() < Date.now()) throw new UnauthorizedException('Token expired');
+
+        if (dbToken.revokedAt) {
+          if (dbToken.sessionId) {
+            await tx.session.updateMany({
+              where: { id: dbToken.sessionId, revokedAt: null },
+              data: { revokedAt: new Date() },
+            });
+            await tx.refreshToken.updateMany({
+              where: { sessionId: dbToken.sessionId, revokedAt: null },
+              data: { revokedAt: new Date() },
+            });
+          }
+          throw new UnauthorizedException('Refresh token reuse detected');
+        }
+
+        if (dbToken.expiresAt.getTime() <= Date.now()) {
+          throw new UnauthorizedException('Token expired');
+        }
+
+        if (!dbToken.sessionId) throw new UnauthorizedException('Invalid session');
+        const session = await tx.session.findUnique({ where: { id: dbToken.sessionId } });
+        if (!session || session.revokedAt || session.expiresAt.getTime() <= Date.now()) {
+          throw new UnauthorizedException('Session expired');
+        }
+
+        const user = await tx.user.findUnique({ where: { id: dbToken.userId } });
+        if (!user || !user.isActive) throw new UnauthorizedException('User is inactive');
 
         const match = await bcrypt.compare(oldRefreshJwt, dbToken.tokenHash);
         if (!match) throw new UnauthorizedException('Invalid token');
 
-        // create new refresh token within same transaction
-        const { refreshJwt: newRefresh, tokenId: newTokenId } = await this.createAndStoreRefreshToken(dbToken.userId, dbToken.sessionId ?? undefined, tx);
+        // Atomically claim the token so concurrent refresh requests cannot both rotate it.
+        const claimed = await tx.refreshToken.updateMany({
+          where: { id: dbToken.id, revokedAt: null },
+          data: { revokedAt: new Date() },
+        });
+        if (claimed.count !== 1) throw new UnauthorizedException('Refresh token reuse detected');
 
-        // mark the old token revoked and replaced
-        await tx.refreshToken.update({ where: { id: dbToken.id }, data: { replacedById: newTokenId, revokedAt: new Date() } });
+        const { refreshJwt: newRefresh, tokenId: newTokenId } =
+          await this.createAndStoreRefreshToken(dbToken.userId, dbToken.sessionId, tx);
+
+        await tx.refreshToken.update({
+          where: { id: dbToken.id },
+          data: { replacedById: newTokenId },
+        });
 
         const accessToken = await this.signAccessToken(dbToken.userId);
         return { accessToken, refreshToken: newRefresh };
       });
-
-      return result;
     } catch (err) {
+      if (err instanceof UnauthorizedException) throw err;
       throw new UnauthorizedException('Invalid token');
     }
   }
 
   async logout(refreshJwt?: string) {
-    if (!refreshJwt) return;
+    if (!refreshJwt) return { success: true };
+
     try {
-      const decoded = jwt.verify(refreshJwt, JWT_REFRESH_SECRET) as any;
-      const tokenId = decoded?.jti;
-      if (!tokenId) return;
-      await this.prisma.refreshToken.updateMany({ where: { id: tokenId }, data: { revokedAt: new Date() } });
-    } catch (err) {
-      // swallow to avoid leaking
+      assertJwtConfiguration();
+      const decoded = jwt.verify(refreshJwt, JWT_REFRESH_SECRET!) as jwt.JwtPayload;
+      const tokenId = decoded.jti;
+      if (!tokenId) return { success: true };
+
+      await this.prisma.$transaction(async (tx) => {
+        const token = await tx.refreshToken.findUnique({ where: { id: tokenId } });
+        if (!token) return;
+
+        if (token.sessionId) {
+          await tx.session.updateMany({
+            where: { id: token.sessionId, revokedAt: null },
+            data: { revokedAt: new Date() },
+          });
+          await tx.refreshToken.updateMany({
+            where: { sessionId: token.sessionId, revokedAt: null },
+            data: { revokedAt: new Date() },
+          });
+        } else {
+          await tx.refreshToken.updateMany({
+            where: { id: token.id, revokedAt: null },
+            data: { revokedAt: new Date() },
+          });
+        }
+      });
+    } catch (_err) {
+      // Logout is intentionally idempotent and does not reveal token validity.
     }
+
+    return { success: true };
   }
 }
