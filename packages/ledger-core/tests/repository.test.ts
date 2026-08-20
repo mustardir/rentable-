@@ -1,9 +1,3 @@
-/**
- * tests/repository.test.ts
- *
- * Tests for InMemoryRepository – append-only semantics and lookups.
- */
-
 import { describe, it, expect, beforeEach } from "vitest";
 import { InMemoryRepository } from "../src/repository.js";
 import { PostingEngine } from "../src/posting-engine.js";
@@ -31,49 +25,54 @@ describe("InMemoryRepository", () => {
   it("saves and retrieves an entry by id", async () => {
     const entry = buildEntry(engine, "r-1");
     await repo.saveEntry(entry);
-    const found = await repo.findEntryById(entry.id);
-    expect(found?.id).toBe(entry.id);
+    expect((await repo.findEntryById(entry.id))?.id).toBe(entry.id);
   });
 
   it("saves and retrieves an entry by idempotency key", async () => {
     const entry = buildEntry(engine, "r-idem");
     await repo.saveEntry(entry);
-    const found = await repo.findEntryByIdempotencyKey("r-idem");
-    expect(found?.idempotencyKey).toBe("r-idem");
+    expect((await repo.findEntryByIdempotencyKey("r-idem"))?.idempotencyKey).toBe("r-idem");
   });
 
-  it("returns undefined for missing id", async () => {
+  it("returns undefined for missing id and idempotency key", async () => {
     expect(await repo.findEntryById("none")).toBeUndefined();
-  });
-
-  it("returns undefined for missing idempotency key", async () => {
     expect(await repo.findEntryByIdempotencyKey("none")).toBeUndefined();
   });
 
-  it("throws on duplicate id (append-only)", async () => {
+  it("rejects duplicate id", async () => {
     const entry = buildEntry(engine, "r-dup");
     await repo.saveEntry(entry);
     await expect(repo.saveEntry(entry)).rejects.toThrow();
   });
 
   it("findAllEntries returns all saved entries", async () => {
-    const e1 = buildEntry(engine, "all-1");
-    const e2 = buildEntry(engine, "all-2");
-    await repo.saveEntry(e1);
-    await repo.saveEntry(e2);
-    const all = await repo.findAllEntries();
-    expect(all).toHaveLength(2);
+    await repo.saveEntry(buildEntry(engine, "all-1"));
+    await repo.saveEntry(buildEntry(engine, "all-2"));
+    expect(await repo.findAllEntries()).toHaveLength(2);
   });
 
-  it("markReversed updates reversedById", async () => {
-    const entry = buildEntry(engine, "r-mark");
-    await repo.saveEntry(entry);
-    await repo.markReversed(entry.id, "reversal-id-xyz");
-    const found = await repo.findEntryById(entry.id);
-    expect(found?.reversedById).toBe("reversal-id-xyz");
+  it("persists a reversal atomically and keeps the original POSTED", async () => {
+    const original = buildEntry(engine, "r-original");
+    const reversal = { ...original, id: "reversal-id-xyz", idempotencyKey: "r-reversal", reversalOfId: original.id, reversedById: undefined };
+    await repo.saveEntry(original);
+    await repo.saveReversal(original.id, reversal);
+    const found = await repo.findEntryById(original.id);
+    expect(found?.status).toBe("POSTED");
+    expect(found?.reversedById).toBe(reversal.id);
+    expect(await repo.findEntryById(reversal.id)).toBeDefined();
   });
 
-  it("markReversed throws for unknown id", async () => {
-    await expect(repo.markReversed("ghost", "rev-id")).rejects.toThrow();
+  it("rejects reversing an unknown entry", async () => {
+    const reversal = buildEntry(engine, "ghost-reversal");
+    await expect(repo.saveReversal("ghost", reversal)).rejects.toThrow("ENTRY_NOT_FOUND:ghost");
+  });
+
+  it("rejects a second reversal", async () => {
+    const original = buildEntry(engine, "double-original");
+    const first = { ...original, id: "reversal-1", idempotencyKey: "double-reversal-1", reversalOfId: original.id, reversedById: undefined };
+    const second = { ...original, id: "reversal-2", idempotencyKey: "double-reversal-2", reversalOfId: original.id, reversedById: undefined };
+    await repo.saveEntry(original);
+    await repo.saveReversal(original.id, first);
+    await expect(repo.saveReversal(original.id, second)).rejects.toThrow("ALREADY_REVERSED:double-original");
   });
 });
