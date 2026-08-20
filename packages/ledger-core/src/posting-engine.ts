@@ -26,10 +26,6 @@ import { ok, err, koboFromBigInt, koboFromNumber } from "./money.js";
 import type { Kobo, Result } from "./money.js";
 import type { Repository } from "./repository.js";
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
 function utcNow(): Date {
   return new Date(Date.now());
 }
@@ -38,9 +34,7 @@ function isDirection(value: string): value is Direction {
   return value === "DEBIT" || value === "CREDIT";
 }
 
-function parseAmountKobo(
-  raw: bigint | number
-): Result<Kobo, JournalError> {
+function parseAmountKobo(raw: bigint | number): Result<Kobo, JournalError> {
   if (typeof raw === "bigint") {
     const r = koboFromBigInt(raw);
     if (!r.ok) {
@@ -63,23 +57,10 @@ function parseAmountKobo(
   return r;
 }
 
-// ---------------------------------------------------------------------------
-// PostingEngine
-// ---------------------------------------------------------------------------
-
 export class PostingEngine {
-  /**
-   * Validates and builds a JournalEntry from a PostCommand.
-   *
-   * Does NOT persist – callers must pass the returned entry to their
-   * Repository. Use with IdempotencyService for safe concurrent posting.
-   *
-   * Returns a typed error instead of throwing.
-   */
   buildEntry(command: PostCommand): Result<JournalEntry, JournalError> {
     const { idempotencyKey, lines: rawLines, postedAt } = command;
 
-    // 1. Must have at least 2 lines
     if (!rawLines || rawLines.length < 2) {
       return err({
         kind: "EMPTY_LINES",
@@ -87,7 +68,6 @@ export class PostingEngine {
       });
     }
 
-    // 2. Parse and validate each line
     const now = utcNow();
     const entryId = randomUUID();
     const parsedLines: JournalLine[] = [];
@@ -101,9 +81,7 @@ export class PostingEngine {
       }
 
       const amountResult = parseAmountKobo(raw.amountKobo);
-      if (!amountResult.ok) {
-        return err(amountResult.error);
-      }
+      if (!amountResult.ok) return err(amountResult.error);
 
       parsedLines.push(
         Object.freeze({
@@ -118,16 +96,11 @@ export class PostingEngine {
       );
     }
 
-    // 3. Verify double-entry balance: Σ(debits) == Σ(credits)
     let totalDebit = 0n;
     let totalCredit = 0n;
-
     for (const line of parsedLines) {
-      if (line.direction === "DEBIT") {
-        totalDebit += line.amountKobo;
-      } else {
-        totalCredit += line.amountKobo;
-      }
+      if (line.direction === "DEBIT") totalDebit += line.amountKobo;
+      else totalCredit += line.amountKobo;
     }
 
     if (totalDebit !== totalCredit) {
@@ -138,44 +111,37 @@ export class PostingEngine {
     }
 
     const timestamp = postedAt ?? now;
-
-    const entry: JournalEntry = Object.freeze({
-      id: entryId,
-      idempotencyKey,
-      status: "POSTED",
-      lines: Object.freeze(parsedLines),
-      postedAt: timestamp,
-      createdAt: now,
-    });
-
-    return ok(entry);
+    return ok(
+      Object.freeze({
+        id: entryId,
+        idempotencyKey,
+        status: "POSTED",
+        lines: Object.freeze(parsedLines),
+        postedAt: timestamp,
+        createdAt: now,
+      })
+    );
   }
 
   /**
-   * Convenience method: build and immediately persist via the repository.
-   *
-   * Note: the idempotency check here is NOT atomic; concurrent callers may still
-   * race unless the repository enforces a unique constraint on idempotencyKey
-   * (or you wrap calls with IdempotencyService.withIdempotency()).
+   * Build and persist through the repository. The repository is responsible
+   * for the database-level uniqueness race; its return value is authoritative.
    */
-  async post(
-    command: PostCommand,
-    repository: Repository
-  ): Promise<Result<JournalEntry, JournalError>> {
-    // Idempotency check
-    const existing = await repository.findEntryByIdempotencyKey(
-      command.idempotencyKey
-    );
-    if (existing) {
-      return ok(existing);
-    }
+  async post(command: PostCommand, repository: Repository): Promise<Result<JournalEntry, JournalError>> {
+    const existing = await repository.findEntryByIdempotencyKey(command.idempotencyKey);
+    if (existing) return ok(existing);
 
     const result = this.buildEntry(command);
-    if (!result.ok) {
-      return result;
-    }
+    if (!result.ok) return result;
 
-    await repository.saveEntry(result.value);
-    return result;
+    try {
+      const persisted = await repository.saveEntry(result.value);
+      return ok(persisted);
+    } catch (error) {
+      // A Repository implementation that cannot resolve a uniqueness race
+      // should surface its original error rather than returning a fabricated
+      // JournalEntry. PrismaLedgerRepository resolves P2002 conflicts itself.
+      return err({ kind: "PERSISTENCE_ERROR", message: error instanceof Error ? error.message : String(error) });
+    }
   }
 }
