@@ -1,5 +1,5 @@
 import { Injectable, UnauthorizedException, BadRequestException } from '@nestjs/common';
-import { Prisma, PrismaClient } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import * as bcrypt from 'bcryptjs';
 import { JwtService } from '@nestjs/jwt';
@@ -154,7 +154,6 @@ export class AuthService {
         const match = await bcrypt.compare(oldRefreshJwt, dbToken.tokenHash);
         if (!match) throw new UnauthorizedException('Invalid token');
 
-        // Atomically claim the token so concurrent refresh requests cannot both rotate it.
         const claimed = await tx.refreshToken.updateMany({
           where: { id: dbToken.id, revokedAt: null },
           data: { revokedAt: new Date() },
