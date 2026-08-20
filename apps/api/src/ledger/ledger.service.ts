@@ -28,10 +28,16 @@ export class LedgerService {
           throw new Error(`INVALID_LEDGER_AMOUNT:${amount.error.kind}`);
         }
 
-        const metadata =
-          line.metadata && typeof line.metadata === 'object' && !Array.isArray(line.metadata) && 'investorId' in line.metadata
-            ? { investorId: String(line.metadata.investorId) }
-            : {};
+        const metadata: Record<string, string> = {};
+        if (
+          line.metadata &&
+          typeof line.metadata === 'object' &&
+          !Array.isArray(line.metadata) &&
+          'investorId' in line.metadata &&
+          line.metadata.investorId != null
+        ) {
+          metadata.investorId = String(line.metadata.investorId);
+        }
 
         return {
           id: line.id,
