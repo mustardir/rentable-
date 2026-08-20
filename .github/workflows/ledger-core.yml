@@ -3,6 +3,7 @@ name: Ledger Core Checks
 on:
   push:
     branches:
+      - main
       - feature/core-banking-ledger-v1
   pull_request:
     branches:
