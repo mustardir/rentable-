@@ -10,7 +10,12 @@
 import type { JournalEntry } from "./journal-entry.js";
 
 export interface Repository {
-  saveEntry(entry: JournalEntry): Promise<void>;
+  /**
+   * Atomically persists an entry and returns the authoritative persisted entry.
+   * Implementations must return the existing entry when an idempotency-key
+   * race is won by another caller.
+   */
+  saveEntry(entry: JournalEntry): Promise<JournalEntry>;
   findEntryById(id: string): Promise<JournalEntry | undefined>;
   findEntryByIdempotencyKey(key: string): Promise<JournalEntry | undefined>;
   findAllEntries(): Promise<readonly JournalEntry[]>;
@@ -23,14 +28,15 @@ export class InMemoryRepository implements Repository {
   private readonly byId = new Map<string, JournalEntry>();
   private readonly byIdempotencyKey = new Map<string, JournalEntry>();
 
-  async saveEntry(entry: JournalEntry): Promise<void> {
+  async saveEntry(entry: JournalEntry): Promise<JournalEntry> {
     if (this.byId.has(entry.id)) throw new Error(`Duplicate entry id: ${entry.id}`);
-    if (this.byIdempotencyKey.has(entry.idempotencyKey)) {
-      throw new Error(`Duplicate idempotency key: ${entry.idempotencyKey}`);
-    }
+    const existing = this.byIdempotencyKey.get(entry.idempotencyKey);
+    if (existing) return existing;
+
     const frozen = Object.freeze({ ...entry });
     this.byId.set(entry.id, frozen);
     this.byIdempotencyKey.set(entry.idempotencyKey, frozen);
+    return frozen;
   }
 
   async findEntryById(id: string): Promise<JournalEntry | undefined> {
