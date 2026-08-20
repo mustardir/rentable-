@@ -43,11 +43,14 @@ describe("InMemoryRepository", () => {
     await expect(repo.saveEntry(entry)).rejects.toThrow();
   });
 
-  it("rejects duplicate idempotency key with a different entry", async () => {
+  it("replays the persisted entry for a duplicate idempotency key", async () => {
     const first = buildEntry(engine, "same-key");
     const second = buildEntry(engine, "same-key");
     await repo.saveEntry(first);
-    await expect(repo.saveEntry(second)).rejects.toThrow("Duplicate idempotency key: same-key");
+    const replayed = await repo.saveEntry(second);
+    expect(replayed.id).toBe(first.id);
+    expect(replayed.idempotencyKey).toBe(first.idempotencyKey);
+    expect(await repo.findAllEntries()).toHaveLength(1);
   });
 
   it("findAllEntries returns all saved entries", async () => {

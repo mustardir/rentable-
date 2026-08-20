@@ -10,31 +10,44 @@ type JournalEntryWithLines = Prisma.JournalEntryGetPayload<{ include: { lines: t
 export class PrismaLedgerRepository implements Repository {
   constructor(private readonly prisma: PrismaService) {}
 
-  async saveEntry(entry: JournalEntry, tx: PrismaTransaction | PrismaService = this.prisma): Promise<void> {
-    await tx.journalEntry.create({
-      data: {
-        id: entry.id,
-        idempotencyKey: entry.idempotencyKey,
-        reference: entry.idempotencyKey,
-        description: `Journal entry ${entry.idempotencyKey}`,
-        currency: 'NGN',
-        status: entry.status as EntryStatus,
-        postedAt: entry.postedAt,
-        reversalOfId: entry.reversalOfId,
-        reversedById: entry.reversedById,
-        createdAt: entry.createdAt,
-        lines: {
-          create: entry.lines.map((line) => ({
-            id: line.id,
-            accountId: line.accountId,
-            direction: line.direction,
-            amountKobo: line.amountKobo,
-            metadata: line.metadata as Prisma.InputJsonValue,
-            createdAt: line.createdAt,
-          })),
+  async saveEntry(entry: JournalEntry, tx: PrismaTransaction | PrismaService = this.prisma): Promise<JournalEntry> {
+    try {
+      await tx.journalEntry.create({
+        data: {
+          id: entry.id,
+          idempotencyKey: entry.idempotencyKey,
+          reference: entry.idempotencyKey,
+          description: `Journal entry ${entry.idempotencyKey}`,
+          currency: 'NGN',
+          status: entry.status as EntryStatus,
+          postedAt: entry.postedAt,
+          reversalOfId: entry.reversalOfId,
+          reversedById: entry.reversedById,
+          createdAt: entry.createdAt,
+          lines: {
+            create: entry.lines.map((line) => ({
+              id: line.id,
+              accountId: line.accountId,
+              direction: line.direction,
+              amountKobo: line.amountKobo,
+              metadata: line.metadata as Prisma.InputJsonValue,
+              createdAt: line.createdAt,
+            })),
+          },
         },
-      },
-    });
+      });
+
+      return entry;
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        const existing = await tx.journalEntry.findUnique({
+          where: { idempotencyKey: entry.idempotencyKey },
+          include: { lines: true },
+        });
+        if (existing) return this.toDomain(existing);
+      }
+      throw error;
+    }
   }
 
   async findEntryById(id: string): Promise<JournalEntry | undefined> {
@@ -55,11 +68,7 @@ export class PrismaLedgerRepository implements Repository {
   async saveReversal(originalEntryId: string, reversal: JournalEntry): Promise<void> {
     await this.prisma.$transaction(async (tx) => {
       const claimed = await tx.journalEntry.updateMany({
-        where: {
-          id: originalEntryId,
-          status: EntryStatus.POSTED,
-          reversedById: null,
-        },
+        where: { id: originalEntryId, status: EntryStatus.POSTED, reversedById: null },
         data: { reversedById: reversal.id },
       });
 
