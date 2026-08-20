@@ -8,7 +8,7 @@ export class LedgerService {
 
   constructor(private readonly prisma: PrismaService) {}
 
-  private async calculateAccountBalance(accountId: string): Promise<string> {
+  private async calculateAccountBalance(accountId: string, investorId: string): Promise<string> {
     const account = await this.prisma.account.findUnique({ where: { id: accountId } });
     if (!account) throw new NotFoundException('ACCOUNT_NOT_FOUND');
 
@@ -33,7 +33,7 @@ export class LedgerService {
           accountId: line.accountId,
           direction: line.direction,
           amountKobo: amount.value,
-          metadata: {},
+          metadata: { investorId: line.metadata && typeof line.metadata === 'object' && 'investorId' in line.metadata ? String(line.metadata.investorId) : undefined },
           createdAt: line.createdAt,
         };
       }),
@@ -43,7 +43,7 @@ export class LedgerService {
       createdAt: entry.createdAt,
     }));
 
-    return this.balanceService.getAccountBalance(accountId, domainEntries).toString();
+    return this.balanceService.getInvestorBalance(accountId, investorId, domainEntries).toString();
   }
 
   async getMyBalance(userId: string): Promise<{ accountId: string; currency: string; balanceKobo: string }> {
@@ -56,7 +56,7 @@ export class LedgerService {
     return {
       accountId: mapping.accountId,
       currency: mapping.currency,
-      balanceKobo: await this.calculateAccountBalance(mapping.accountId),
+      balanceKobo: await this.calculateAccountBalance(mapping.accountId, userId),
     };
   }
 }
