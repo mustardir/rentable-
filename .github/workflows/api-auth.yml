@@ -3,6 +3,7 @@ name: API Authentication Checks
 on:
   push:
     branches:
+      - main
       - feature/production-authentication
   pull_request:
     branches:
