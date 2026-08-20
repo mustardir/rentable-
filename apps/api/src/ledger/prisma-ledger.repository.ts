@@ -4,10 +4,7 @@ import type { JournalEntry, JournalLine, Repository } from '@fortress/ledger-cor
 import { PrismaService } from '../prisma/prisma.service';
 
 type PrismaTransaction = Omit<PrismaService, '$connect' | '$disconnect' | '$on' | '$transaction' | '$use' | '$extends'>;
-
-type JournalEntryWithLines = Prisma.JournalEntryGetPayload<{
-  include: { lines: true };
-}>;
+type JournalEntryWithLines = Prisma.JournalEntryGetPayload<{ include: { lines: true } }>;
 
 @Injectable()
 export class PrismaLedgerRepository implements Repository {
@@ -41,33 +38,42 @@ export class PrismaLedgerRepository implements Repository {
   }
 
   async findEntryById(id: string): Promise<JournalEntry | undefined> {
-    const entry = await this.prisma.journalEntry.findUnique({
-      where: { id },
-      include: { lines: true },
-    });
+    const entry = await this.prisma.journalEntry.findUnique({ where: { id }, include: { lines: true } });
     return entry ? this.toDomain(entry) : undefined;
   }
 
   async findEntryByIdempotencyKey(key: string): Promise<JournalEntry | undefined> {
-    const entry = await this.prisma.journalEntry.findUnique({
-      where: { idempotencyKey: key },
-      include: { lines: true },
-    });
+    const entry = await this.prisma.journalEntry.findUnique({ where: { idempotencyKey: key }, include: { lines: true } });
     return entry ? this.toDomain(entry) : undefined;
   }
 
   async findAllEntries(): Promise<readonly JournalEntry[]> {
-    const entries = await this.prisma.journalEntry.findMany({
-      orderBy: { createdAt: 'asc' },
-      include: { lines: true },
-    });
+    const entries = await this.prisma.journalEntry.findMany({ orderBy: { createdAt: 'asc' }, include: { lines: true } });
     return entries.map((entry) => this.toDomain(entry));
   }
 
-  async markReversed(entryId: string, reversedById: string): Promise<void> {
-    await this.prisma.journalEntry.update({
-      where: { id: entryId },
-      data: { reversedById, status: EntryStatus.REVERSED },
+  async saveReversal(originalEntryId: string, reversal: JournalEntry): Promise<void> {
+    await this.prisma.$transaction(async (tx) => {
+      // Claim the original first. The conditional update prevents two concurrent
+      // reversals from both succeeding. The transaction rolls back the claim if
+      // creating the reversal fails for any reason.
+      const claimed = await tx.journalEntry.updateMany({
+        where: {
+          id: originalEntryId,
+          status: EntryStatus.POSTED,
+          reversedById: null,
+        },
+        data: { reversedById: reversal.id },
+      });
+
+      if (claimed.count !== 1) {
+        const current = await tx.journalEntry.findUnique({ where: { id: originalEntryId } });
+        if (!current) throw new Error(`ENTRY_NOT_FOUND:${originalEntryId}`);
+        if (current.status !== EntryStatus.POSTED) throw new Error(`NOT_POSTED:${originalEntryId}`);
+        throw new Error(`ALREADY_REVERSED:${originalEntryId}`);
+      }
+
+      await this.saveEntry(reversal, tx);
     });
   }
 
@@ -95,12 +101,7 @@ export class PrismaLedgerRepository implements Repository {
   }
 
   private stringMetadata(metadata: Prisma.JsonValue): Readonly<Record<string, string>> {
-    if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) {
-      return {};
-    }
-
-    return Object.fromEntries(
-      Object.entries(metadata).map(([key, value]) => [key, String(value)]),
-    );
+    if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return {};
+    return Object.fromEntries(Object.entries(metadata).map(([key, value]) => [key, String(value)]));
   }
 }
