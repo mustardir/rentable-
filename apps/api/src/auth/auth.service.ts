@@ -110,22 +110,26 @@ export class AuthService {
       process.env.SESSION_EXPIRES || REFRESH_TOKEN_EXPIRES_IN,
     );
 
-    const session = await this.prisma.session.create({
-      data: {
-        userId: user.id,
-        expiresAt: new Date(Date.now() + sessionExpiryMs),
-        ipAddress: ip,
-        userAgent,
-      },
+    const { session, refreshJwt } = await this.prisma.$transaction(async (tx) => {
+      const session = await tx.session.create({
+        data: {
+          userId: user.id,
+          expiresAt: new Date(Date.now() + sessionExpiryMs),
+          ipAddress: ip,
+          userAgent,
+        },
+      });
+      const { refreshJwt } = await this.createAndStoreRefreshToken(user.id, session.id, tx);
+      return { session, refreshJwt };
     });
 
     const accessToken = await this.signAccessToken(user.id);
-    const { refreshJwt } = await this.createAndStoreRefreshToken(user.id, session.id);
 
     return {
       accessToken,
       refreshToken: refreshJwt,
       user: { id: user.id, email: user.email, role: user.role },
+      sessionId: session.id,
     };
   }
 
@@ -163,7 +167,6 @@ export class AuthService {
       if (!match) throw new UnauthorizedException('Invalid token');
 
       const result = await this.prisma.$transaction(async (tx) => {
-        // Atomically claim the token. Only one concurrent refresh can win.
         const claimed = await tx.refreshToken.updateMany({
           where: { id: dbToken.id, revokedAt: null },
           data: { revokedAt: new Date() },
