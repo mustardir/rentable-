@@ -1,7 +1,6 @@
 import { LedgerService } from './ledger.service';
 
 describe('LedgerService user balance authorization', () => {
-  const getAccountBalance = jest.fn().mockResolvedValue('12500');
   const prisma = {
     userLedgerAccount: { findFirst: jest.fn() },
     account: { findUnique: jest.fn().mockResolvedValue({ id: 'acct-1' }) },
