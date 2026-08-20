@@ -18,9 +18,7 @@ describe("InMemoryRepository", () => {
   let repo: InMemoryRepository;
   const engine = new PostingEngine();
 
-  beforeEach(() => {
-    repo = new InMemoryRepository();
-  });
+  beforeEach(() => { repo = new InMemoryRepository(); });
 
   it("saves and retrieves an entry by id", async () => {
     const entry = buildEntry(engine, "r-1");
@@ -45,6 +43,13 @@ describe("InMemoryRepository", () => {
     await expect(repo.saveEntry(entry)).rejects.toThrow();
   });
 
+  it("rejects duplicate idempotency key with a different entry", async () => {
+    const first = buildEntry(engine, "same-key");
+    const second = buildEntry(engine, "same-key");
+    await repo.saveEntry(first);
+    await expect(repo.saveEntry(second)).rejects.toThrow("Duplicate idempotency key: same-key");
+  });
+
   it("findAllEntries returns all saved entries", async () => {
     await repo.saveEntry(buildEntry(engine, "all-1"));
     await repo.saveEntry(buildEntry(engine, "all-2"));
@@ -53,12 +58,7 @@ describe("InMemoryRepository", () => {
 
   it("persists a reversal atomically and keeps the original POSTED", async () => {
     const original = buildEntry(engine, "r-original");
-    const reversal = {
-      ...original,
-      id: "reversal-id-xyz",
-      idempotencyKey: "r-reversal",
-      reversalOfId: original.id,
-    };
+    const reversal = { ...original, id: "reversal-id-xyz", idempotencyKey: "r-reversal", reversalOfId: original.id };
     await repo.saveEntry(original);
     await repo.saveReversal(original.id, reversal);
     const found = await repo.findEntryById(original.id);
@@ -72,22 +72,38 @@ describe("InMemoryRepository", () => {
     await expect(repo.saveReversal("ghost", reversal)).rejects.toThrow("ENTRY_NOT_FOUND:ghost");
   });
 
+  it("rejects reversing a non-POSTED entry", async () => {
+    const original = buildEntry(engine, "not-posted");
+    const nonPosted = { ...original, status: "REVERSED" as const };
+    await repo.saveEntry(nonPosted);
+    const reversal = buildEntry(engine, "not-posted-reversal");
+    await expect(repo.saveReversal(original.id, reversal)).rejects.toThrow(`NOT_POSTED:${original.id}`);
+  });
+
   it("rejects a second reversal", async () => {
     const original = buildEntry(engine, "double-original");
-    const first = {
-      ...original,
-      id: "reversal-1",
-      idempotencyKey: "double-reversal-1",
-      reversalOfId: original.id,
-    };
-    const second = {
-      ...original,
-      id: "reversal-2",
-      idempotencyKey: "double-reversal-2",
-      reversalOfId: original.id,
-    };
+    const first = { ...original, id: "reversal-1", idempotencyKey: "double-reversal-1", reversalOfId: original.id };
+    const second = { ...original, id: "reversal-2", idempotencyKey: "double-reversal-2", reversalOfId: original.id };
     await repo.saveEntry(original);
     await repo.saveReversal(original.id, first);
     await expect(repo.saveReversal(original.id, second)).rejects.toThrow(`ALREADY_REVERSED:${original.id}`);
+  });
+
+  it("rejects a reversal with a duplicate id", async () => {
+    const original = buildEntry(engine, "duplicate-reversal-id-original");
+    const reversal = { ...original, id: "existing-reversal-id", idempotencyKey: "existing-reversal-key", reversalOfId: original.id };
+    const conflicting = { ...original, id: "existing-reversal-id", idempotencyKey: "conflicting-reversal-key", reversalOfId: original.id };
+    await repo.saveEntry(original);
+    await repo.saveEntry(reversal);
+    await expect(repo.saveReversal(original.id, conflicting)).rejects.toThrow("Duplicate entry id: existing-reversal-id");
+  });
+
+  it("rejects a reversal with a duplicate idempotency key", async () => {
+    const original = buildEntry(engine, "duplicate-reversal-key-original");
+    const reversal = { ...original, id: "reversal-key-id", idempotencyKey: "existing-reversal-key", reversalOfId: original.id };
+    const conflicting = { ...original, id: "reversal-key-conflict", idempotencyKey: "existing-reversal-key", reversalOfId: original.id };
+    await repo.saveEntry(original);
+    await repo.saveEntry(reversal);
+    await expect(repo.saveReversal(original.id, conflicting)).rejects.toThrow("Duplicate idempotency key: existing-reversal-key");
   });
 });
