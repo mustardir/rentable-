@@ -3,59 +3,28 @@
  *
  * Pure-TypeScript repository interface and an in-memory implementation.
  *
- * No Prisma, Redis, or any external infrastructure dependency.
- * The in-memory implementation is used for tests and as a reference.
- * Production implementations must satisfy the same interface.
+ * Journal entries and lines are append-only. Reversal metadata is the only
+ * allowed mutation to an existing entry, and reversal persistence is atomic.
  */
 
 import type { JournalEntry } from "./journal-entry.js";
 
-// ---------------------------------------------------------------------------
-// Repository interface
-// ---------------------------------------------------------------------------
-
 export interface Repository {
-  /**
-   * Persists a new journal entry (append-only – no updates).
-   * Throws if an entry with the same id already exists.
-   */
   saveEntry(entry: JournalEntry): Promise<void>;
-
-  /**
-   * Finds an entry by its primary id.
-   */
   findEntryById(id: string): Promise<JournalEntry | undefined>;
-
-  /**
-   * Finds an entry by its idempotency key.
-   */
   findEntryByIdempotencyKey(key: string): Promise<JournalEntry | undefined>;
-
-  /**
-   * Returns all posted entries in insertion order.
-   */
   findAllEntries(): Promise<readonly JournalEntry[]>;
 
-  /**
-   * Atomically updates the reversedById field of an existing entry.
-   * This is the only permitted mutation; all other fields are immutable.
-   */
-  markReversed(entryId: string, reversedById: string): Promise<void>;
+  /** Atomically appends a reversal and marks the original as reversed. */
+  saveReversal(originalEntryId: string, reversal: JournalEntry): Promise<void>;
 }
 
-// ---------------------------------------------------------------------------
-// In-memory implementation
-// ---------------------------------------------------------------------------
-
 export class InMemoryRepository implements Repository {
-  // Stored as Object.freeze snapshots to prevent accidental mutation
   private readonly byId = new Map<string, JournalEntry>();
   private readonly byIdempotencyKey = new Map<string, JournalEntry>();
 
   async saveEntry(entry: JournalEntry): Promise<void> {
-    if (this.byId.has(entry.id)) {
-      throw new Error(`Duplicate entry id: ${entry.id}`);
-    }
+    if (this.byId.has(entry.id)) throw new Error(`Duplicate entry id: ${entry.id}`);
     if (this.byIdempotencyKey.has(entry.idempotencyKey)) {
       throw new Error(`Duplicate idempotency key: ${entry.idempotencyKey}`);
     }
@@ -68,9 +37,7 @@ export class InMemoryRepository implements Repository {
     return this.byId.get(id);
   }
 
-  async findEntryByIdempotencyKey(
-    key: string
-  ): Promise<JournalEntry | undefined> {
+  async findEntryByIdempotencyKey(key: string): Promise<JournalEntry | undefined> {
     return this.byIdempotencyKey.get(key);
   }
 
@@ -78,13 +45,25 @@ export class InMemoryRepository implements Repository {
     return Array.from(this.byId.values());
   }
 
-  async markReversed(entryId: string, reversedById: string): Promise<void> {
-    const entry = this.byId.get(entryId);
-    if (!entry) {
-      throw new Error(`Entry not found: ${entryId}`);
+  async saveReversal(originalEntryId: string, reversal: JournalEntry): Promise<void> {
+    const original = this.byId.get(originalEntryId);
+    if (!original) throw new Error(`ENTRY_NOT_FOUND:${originalEntryId}`);
+    if (original.status !== "POSTED") throw new Error(`NOT_POSTED:${originalEntryId}`);
+    if (original.reversedById !== undefined) {
+      throw new Error(`ALREADY_REVERSED:${originalEntryId}`);
     }
-    const updated = Object.freeze({ ...entry, reversedById });
-    this.byId.set(entryId, updated);
-    this.byIdempotencyKey.set(entry.idempotencyKey, updated);
+    if (this.byId.has(reversal.id)) throw new Error(`Duplicate entry id: ${reversal.id}`);
+    if (this.byIdempotencyKey.has(reversal.idempotencyKey)) {
+      throw new Error(`Duplicate idempotency key: ${reversal.idempotencyKey}`);
+    }
+
+    const reversalFrozen = Object.freeze({ ...reversal });
+    const originalUpdated = Object.freeze({ ...original, reversedById: reversal.id });
+
+    // Both maps are updated synchronously; there is no observable half-commit.
+    this.byId.set(originalEntryId, originalUpdated);
+    this.byIdempotencyKey.set(original.idempotencyKey, originalUpdated);
+    this.byId.set(reversal.id, reversalFrozen);
+    this.byIdempotencyKey.set(reversal.idempotencyKey, reversalFrozen);
   }
 }
