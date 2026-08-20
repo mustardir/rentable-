@@ -15,13 +15,7 @@
 
 import { randomUUID } from "crypto";
 import type { Direction } from "./account.js";
-import type {
-  JournalEntry,
-  JournalError,
-  JournalLine,
-  LineInput,
-  PostCommand,
-} from "./journal-entry.js";
+import type { JournalEntry, JournalError, JournalLine, PostCommand } from "./journal-entry.js";
 import { ok, err, koboFromBigInt, koboFromNumber } from "./money.js";
 import type { Kobo, Result } from "./money.js";
 import type { Repository } from "./repository.js";
@@ -37,23 +31,16 @@ function isDirection(value: string): value is Direction {
 function parseAmountKobo(raw: bigint | number): Result<Kobo, JournalError> {
   if (typeof raw === "bigint") {
     const r = koboFromBigInt(raw);
-    if (!r.ok) {
-      return err({ kind: r.error.kind as JournalError["kind"], message: r.error.message });
-    }
+    if (!r.ok) return err({ kind: r.error.kind as JournalError["kind"], message: r.error.message });
     return r;
   }
 
   if (!Number.isInteger(raw)) {
-    return err({
-      kind: "FLOAT_INPUT",
-      message: `amountKobo must be an integer, got ${raw}`,
-    });
+    return err({ kind: "FLOAT_INPUT", message: `amountKobo must be an integer, got ${raw}` });
   }
 
   const r = koboFromNumber(raw);
-  if (!r.ok) {
-    return err({ kind: r.error.kind as JournalError["kind"], message: r.error.message });
-  }
+  if (!r.ok) return err({ kind: r.error.kind as JournalError["kind"], message: r.error.message });
   return r;
 }
 
@@ -62,10 +49,7 @@ export class PostingEngine {
     const { idempotencyKey, lines: rawLines, postedAt } = command;
 
     if (!rawLines || rawLines.length < 2) {
-      return err({
-        kind: "EMPTY_LINES",
-        message: "A journal entry requires at least 2 lines (one debit, one credit)",
-      });
+      return err({ kind: "EMPTY_LINES", message: "A journal entry requires at least 2 lines (one debit, one credit)" });
     }
 
     const now = utcNow();
@@ -74,26 +58,21 @@ export class PostingEngine {
 
     for (const raw of rawLines) {
       if (!isDirection(raw.direction)) {
-        return err({
-          kind: "INVALID_DIRECTION",
-          message: `direction must be either DEBIT or CREDIT, got ${raw.direction}`,
-        });
+        return err({ kind: "INVALID_DIRECTION", message: `direction must be either DEBIT or CREDIT, got ${raw.direction}` });
       }
 
       const amountResult = parseAmountKobo(raw.amountKobo);
       if (!amountResult.ok) return err(amountResult.error);
 
-      parsedLines.push(
-        Object.freeze({
-          id: randomUUID(),
-          journalEntryId: entryId,
-          accountId: raw.accountId,
-          direction: raw.direction,
-          amountKobo: amountResult.value,
-          metadata: Object.freeze({ ...(raw.metadata ?? {}) }),
-          createdAt: now,
-        })
-      );
+      parsedLines.push(Object.freeze({
+        id: randomUUID(),
+        journalEntryId: entryId,
+        accountId: raw.accountId,
+        direction: raw.direction,
+        amountKobo: amountResult.value,
+        metadata: Object.freeze({ ...(raw.metadata ?? {}) }),
+        createdAt: now,
+      }));
     }
 
     let totalDebit = 0n;
@@ -104,28 +83,23 @@ export class PostingEngine {
     }
 
     if (totalDebit !== totalCredit) {
-      return err({
-        kind: "UNBALANCED_ENTRY",
-        message: `Σ(debits)=${totalDebit} ≠ Σ(credits)=${totalCredit}; entry rejected`,
-      });
+      return err({ kind: "UNBALANCED_ENTRY", message: `Σ(debits)=${totalDebit} ≠ Σ(credits)=${totalCredit}; entry rejected` });
     }
 
     const timestamp = postedAt ?? now;
-    return ok(
-      Object.freeze({
-        id: entryId,
-        idempotencyKey,
-        status: "POSTED",
-        lines: Object.freeze(parsedLines),
-        postedAt: timestamp,
-        createdAt: now,
-      })
-    );
+    return ok(Object.freeze({
+      id: entryId,
+      idempotencyKey,
+      status: "POSTED",
+      lines: Object.freeze(parsedLines),
+      postedAt: timestamp,
+      createdAt: now,
+    }));
   }
 
   /**
-   * Build and persist through the repository. The repository is responsible
-   * for the database-level uniqueness race; its return value is authoritative.
+   * Build and persist through the repository. The repository return value is
+   * authoritative, including when a database uniqueness race is resolved.
    */
   async post(command: PostCommand, repository: Repository): Promise<Result<JournalEntry, JournalError>> {
     const existing = await repository.findEntryByIdempotencyKey(command.idempotencyKey);
@@ -134,14 +108,7 @@ export class PostingEngine {
     const result = this.buildEntry(command);
     if (!result.ok) return result;
 
-    try {
-      const persisted = await repository.saveEntry(result.value);
-      return ok(persisted);
-    } catch (error) {
-      // A Repository implementation that cannot resolve a uniqueness race
-      // should surface its original error rather than returning a fabricated
-      // JournalEntry. PrismaLedgerRepository resolves P2002 conflicts itself.
-      return err({ kind: "PERSISTENCE_ERROR", message: error instanceof Error ? error.message : String(error) });
-    }
+    const persisted = await repository.saveEntry(result.value);
+    return ok(persisted);
   }
 }
