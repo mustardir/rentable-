@@ -27,13 +27,19 @@ export class LedgerService {
         if (!amount.ok) {
           throw new Error(`INVALID_LEDGER_AMOUNT:${amount.error.kind}`);
         }
+
+        const metadata =
+          line.metadata && typeof line.metadata === 'object' && !Array.isArray(line.metadata) && 'investorId' in line.metadata
+            ? { investorId: String(line.metadata.investorId) }
+            : {};
+
         return {
           id: line.id,
           journalEntryId: line.journalEntryId,
           accountId: line.accountId,
           direction: line.direction,
           amountKobo: amount.value,
-          metadata: { investorId: line.metadata && typeof line.metadata === 'object' && 'investorId' in line.metadata ? String(line.metadata.investorId) : undefined },
+          metadata,
           createdAt: line.createdAt,
         };
       }),
