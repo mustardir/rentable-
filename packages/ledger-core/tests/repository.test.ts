@@ -88,6 +88,6 @@ describe("InMemoryRepository", () => {
     };
     await repo.saveEntry(original);
     await repo.saveReversal(original.id, first);
-    await expect(repo.saveReversal(original.id, second)).rejects.toThrow("ALREADY_REVERSED:${original.id}");
+    await expect(repo.saveReversal(original.id, second)).rejects.toThrow(`ALREADY_REVERSED:${original.id}`);
   });
 });
