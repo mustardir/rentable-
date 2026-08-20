@@ -10,7 +10,7 @@ on:
       - feature/production-authentication
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   api-auth:
@@ -33,21 +33,8 @@ jobs:
           node-version: 22
           cache: pnpm
 
-      - name: Install dependencies and synchronize lockfile
-        run: pnpm install --no-frozen-lockfile
-
-      - name: Commit synchronized lockfile
-        if: github.event_name == 'pull_request'
-        run: |
-          if git diff --quiet -- pnpm-lock.yaml; then
-            echo "pnpm-lock.yaml is already synchronized."
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add pnpm-lock.yaml
-          git commit -m "fix(api): synchronize pnpm lockfile"
-          git push origin HEAD:${{ github.head_ref }}
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
 
       - name: Generate Prisma client
         run: pnpm --filter @fortress-fund/api prisma:generate
