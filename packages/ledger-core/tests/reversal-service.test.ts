@@ -1,12 +1,9 @@
-/**
- * Reversal acceptance tests.
- */
-
 import { describe, it, expect, beforeEach } from "vitest";
 import { PostingEngine } from "../src/posting-engine.js";
 import { ReversalService } from "../src/reversal-service.js";
 import { BalanceService } from "../src/balance-service.js";
 import { InMemoryRepository } from "../src/repository.js";
+import type { JournalEntry } from "../src/journal-entry.js";
 
 async function postDeposit(engine: PostingEngine, repo: InMemoryRepository, key: string, amountKobo: bigint) {
   const r = await engine.post({
@@ -18,6 +15,13 @@ async function postDeposit(engine: PostingEngine, repo: InMemoryRepository, key:
   }, repo);
   if (!r.ok) throw new Error(r.error.message);
   return r.value;
+}
+
+class ThrowingReversalRepository extends InMemoryRepository {
+  constructor(private readonly errorMessage: string) { super(); }
+  override async saveReversal(_originalEntryId: string, _reversal: JournalEntry): Promise<void> {
+    throw new Error(this.errorMessage);
+  }
 }
 
 describe("ReversalService.reverse", () => {
@@ -62,7 +66,6 @@ describe("ReversalService.reverse", () => {
     const original = await postDeposit(engine, repo, "immutable-orig", 1_000n);
     const result = await reversalSvc.reverse({ originalEntryId: original.id, idempotencyKey: "immutable-rev" }, repo);
     expect(result.ok).toBe(true);
-
     const updated = await repo.findEntryById(original.id);
     expect(updated?.status).toBe("POSTED");
     expect(updated?.reversedById).toBe(result.ok ? result.value.id : undefined);
@@ -87,7 +90,6 @@ describe("ReversalService.reverse", () => {
     if (!buildResult.ok) return;
     const reversedEntry = { ...buildResult.value, status: "REVERSED" as const };
     await repo.saveEntry(reversedEntry);
-
     const result = await reversalSvc.reverse({ originalEntryId: reversedEntry.id, idempotencyKey: "rev-of-reversed" }, repo);
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error.kind).toBe("NOT_POSTED");
@@ -126,5 +128,19 @@ describe("ReversalService.reverse", () => {
     const result = await reversalSvc.reverse({ originalEntryId: original.id, idempotencyKey: "ts-rev", reversedAt: fixedDate }, repo);
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.value.postedAt.toISOString()).toBe("2025-03-10T08:00:00.000Z");
+  });
+
+  it.each([
+    ["ENTRY_NOT_FOUND:race", "ENTRY_NOT_FOUND"],
+    ["NOT_POSTED:race", "NOT_POSTED"],
+    ["ALREADY_REVERSED:race", "ALREADY_REVERSED"],
+    ["unexpected repository failure", "DUPLICATE_IDEMPOTENCY_KEY"],
+  ])("maps repository failure %s to %s", async (errorMessage, expectedKind) => {
+    const original = await postDeposit(engine, repo, `map-${expectedKind}`, 1_000n);
+    const throwingRepo = new ThrowingReversalRepository(errorMessage);
+    await throwingRepo.saveEntry(original);
+    const result = await reversalSvc.reverse({ originalEntryId: original.id, idempotencyKey: `map-rev-${expectedKind}` }, throwingRepo);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.kind).toBe(expectedKind);
   });
 });
