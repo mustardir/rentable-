@@ -1,15 +1,9 @@
 /**
  * reversal-service.ts
  *
- * Reversal-only correction mechanism.
- *
- * Corrections to posted journal entries are made exclusively by creating
- * a new reversing entry with all debit/credit directions swapped.
- * The original entry is linked to the reversal via reversedById,
- * and the reversal entry carries reversalOfId.
- *
- * After reversal, the net effect of (original + reversal) is zero.
- * Reversing an already-reversed entry is rejected.
+ * Posted entries are corrected exclusively by appending a reversing entry.
+ * The original entry's journal lines are never changed. Reversal persistence
+ * is delegated to the repository so the append + reversal link is atomic.
  */
 
 import { randomUUID } from "crypto";
@@ -18,51 +12,40 @@ import type { Kobo, Result } from "./money.js";
 import { ok, err } from "./money.js";
 import type { Repository } from "./repository.js";
 
-// ---------------------------------------------------------------------------
-// ReversalService
-// ---------------------------------------------------------------------------
+function repositoryError(error: unknown): JournalError {
+  const message = error instanceof Error ? error.message : String(error);
+  if (message.startsWith("ENTRY_NOT_FOUND:")) {
+    return { kind: "ENTRY_NOT_FOUND", message: `Journal entry not found: ${message.slice(17)}` };
+  }
+  if (message.startsWith("NOT_POSTED:")) {
+    return { kind: "NOT_POSTED", message: `Only POSTED entries may be reversed: ${message.slice(11)}` };
+  }
+  if (message.startsWith("ALREADY_REVERSED:")) {
+    return { kind: "ALREADY_REVERSED", message: `Entry was already reversed: ${message.slice(17)}` };
+  }
+  return { kind: "DUPLICATE_IDEMPOTENCY_KEY", message };
+}
 
 export class ReversalService {
-  /**
-   * Creates a reversing JournalEntry for the given original entry.
-   *
-   * Steps:
-   * 1. Load the original entry from the repository.
-   * 2. Validate it is POSTED and not already reversed.
-   * 3. Build a mirror entry (all directions swapped, same amounts).
-   * 4. Persist both the reversal entry and the updated original.
-   * 5. Return the new reversal entry.
-   */
   async reverse(
     command: ReversalCommand,
     repository: Repository
   ): Promise<Result<JournalEntry, JournalError>> {
     const { originalEntryId, idempotencyKey, reversedAt } = command;
 
-    // 1. Check idempotency: if this key was already used, return existing
     const existingByKey = await repository.findEntryByIdempotencyKey(idempotencyKey);
-    if (existingByKey) {
-      return ok(existingByKey);
-    }
+    if (existingByKey) return ok(existingByKey);
 
-    // 2. Load the original entry
     const original = await repository.findEntryById(originalEntryId);
     if (!original) {
-      return err({
-        kind: "ENTRY_NOT_FOUND",
-        message: `Journal entry not found: ${originalEntryId}`,
-      });
+      return err({ kind: "ENTRY_NOT_FOUND", message: `Journal entry not found: ${originalEntryId}` });
     }
-
-    // 3. Must be POSTED to be reversed
     if (original.status !== "POSTED") {
       return err({
         kind: "NOT_POSTED",
         message: `Entry ${originalEntryId} has status "${original.status}"; only POSTED entries may be reversed`,
       });
     }
-
-    // 4. Already reversed?
     if (original.reversedById !== undefined) {
       return err({
         kind: "ALREADY_REVERSED",
@@ -70,10 +53,8 @@ export class ReversalService {
       });
     }
 
-    // 5. Build the reversing entry
     const now = reversedAt ?? new Date(Date.now());
     const reversalId = randomUUID();
-
     const mirroredLines = original.lines.map((line) =>
       Object.freeze({
         id: randomUUID(),
@@ -96,12 +77,13 @@ export class ReversalService {
       createdAt: now,
     });
 
-    // 6. Persist the reversal entry
-    await repository.saveEntry(reversalEntry);
-
-    // 7. Mark the original as reversed
-    await repository.markReversed(originalEntryId, reversalId);
-
-    return ok(reversalEntry);
+    try {
+      await repository.saveReversal(originalEntryId, reversalEntry);
+      return ok(reversalEntry);
+    } catch (error) {
+      // A concurrent reversal can win between the initial read and the atomic
+      // repository operation. Map that conflict back to a domain error.
+      return err(repositoryError(error));
+    }
   }
 }
