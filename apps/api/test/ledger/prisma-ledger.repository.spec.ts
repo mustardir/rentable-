@@ -1,5 +1,5 @@
 import { PrismaClient } from '@prisma/client';
-import type { JournalEntry } from '@fortress/ledger-core';
+import { koboFromBigInt, type JournalEntry } from '@fortress/ledger-core';
 import { PrismaLedgerRepository } from '../../src/ledger/prisma-ledger.repository';
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -13,6 +13,10 @@ describePrisma('PrismaLedgerRepository concurrent idempotency', () => {
 
   function entry(id: string, key: string): JournalEntry {
     const now = new Date();
+    const amountResult = koboFromBigInt(10_000n);
+    if (!amountResult.ok) throw new Error(amountResult.error.message);
+    const amountKobo = amountResult.value;
+
     return {
       id,
       idempotencyKey: key,
@@ -20,8 +24,8 @@ describePrisma('PrismaLedgerRepository concurrent idempotency', () => {
       postedAt: now,
       createdAt: now,
       lines: [
-        { id: `${id}-debit`, journalEntryId: id, accountId: accountIds[0], direction: 'DEBIT', amountKobo: 10_000n, metadata: {}, createdAt: now },
-        { id: `${id}-credit`, journalEntryId: id, accountId: accountIds[1], direction: 'CREDIT', amountKobo: 10_000n, metadata: {}, createdAt: now },
+        { id: `${id}-debit`, journalEntryId: id, accountId: accountIds[0], direction: 'DEBIT', amountKobo, metadata: {}, createdAt: now },
+        { id: `${id}-credit`, journalEntryId: id, accountId: accountIds[1], direction: 'CREDIT', amountKobo, metadata: {}, createdAt: now },
       ],
     };
   }
