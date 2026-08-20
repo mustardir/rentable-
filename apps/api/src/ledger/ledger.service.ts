@@ -1,61 +1,13 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { BalanceService, koboFromBigInt, type JournalEntryStatus } from '@fortress/ledger-core';
 import { PrismaService } from '../prisma/prisma.service';
+import { PrismaBalanceRepository } from './prisma-balance.repository';
 
 @Injectable()
 export class LedgerService {
-  private readonly balanceService = new BalanceService();
+  private readonly balanceRepository: PrismaBalanceRepository;
 
-  constructor(private readonly prisma: PrismaService) {}
-
-  private async calculateAccountBalance(accountId: string, investorId: string): Promise<string> {
-    const account = await this.prisma.account.findUnique({ where: { id: accountId } });
-    if (!account) throw new NotFoundException('ACCOUNT_NOT_FOUND');
-
-    const entries = await this.prisma.journalEntry.findMany({
-      where: { status: 'POSTED' },
-      include: { lines: true },
-      orderBy: { createdAt: 'asc' },
-    });
-
-    const domainEntries = entries.map((entry) => ({
-      id: entry.id,
-      idempotencyKey: entry.idempotencyKey,
-      status: entry.status as JournalEntryStatus,
-      lines: entry.lines.map((line) => {
-        const amount = koboFromBigInt(line.amountKobo);
-        if (!amount.ok) {
-          throw new Error(`INVALID_LEDGER_AMOUNT:${amount.error.kind}`);
-        }
-
-        const metadata: Record<string, string> = {};
-        if (
-          line.metadata &&
-          typeof line.metadata === 'object' &&
-          !Array.isArray(line.metadata) &&
-          'investorId' in line.metadata &&
-          line.metadata.investorId != null
-        ) {
-          metadata.investorId = String(line.metadata.investorId);
-        }
-
-        return {
-          id: line.id,
-          journalEntryId: line.journalEntryId,
-          accountId: line.accountId,
-          direction: line.direction,
-          amountKobo: amount.value,
-          metadata,
-          createdAt: line.createdAt,
-        };
-      }),
-      postedAt: entry.postedAt,
-      reversalOfId: entry.reversalOfId ?? undefined,
-      reversedById: entry.reversedById ?? undefined,
-      createdAt: entry.createdAt,
-    }));
-
-    return this.balanceService.getInvestorBalance(accountId, investorId, domainEntries).toString();
+  constructor(private readonly prisma: PrismaService) {
+    this.balanceRepository = new PrismaBalanceRepository(prisma);
   }
 
   async getMyBalance(userId: string): Promise<{ accountId: string; currency: string; balanceKobo: string }> {
@@ -65,10 +17,13 @@ export class LedgerService {
     });
     if (!mapping) throw new NotFoundException('LEDGER_ACCOUNT_NOT_FOUND');
 
+    const account = await this.prisma.account.findUnique({ where: { id: mapping.accountId } });
+    if (!account) throw new NotFoundException('ACCOUNT_NOT_FOUND');
+
     return {
       accountId: mapping.accountId,
       currency: mapping.currency,
-      balanceKobo: await this.calculateAccountBalance(mapping.accountId, userId),
+      balanceKobo: (await this.balanceRepository.getInvestorBalance(mapping.accountId, userId)).toString(),
     };
   }
 }
