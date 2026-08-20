@@ -128,7 +128,7 @@ describe('AuthService (unit)', () => {
     expect(await service.validateUser('login@example.com', 'Password1')).toBeNull();
   });
 
-  it('logs in, rotates refresh tokens, and rejects reuse', async () => {
+  it('logs in, rotates refresh tokens, and revokes the session on reuse', async () => {
     await service.register('rot@example.com', 'Password1', 'Rot');
     const login = await service.login('rot@example.com', 'Password1');
     expect(login.accessToken).toMatch(/^access-/);
@@ -140,7 +140,7 @@ describe('AuthService (unit)', () => {
     expect(r1.refreshToken).not.toBe(login.refreshToken);
 
     await expect(service.refresh(login.refreshToken)).rejects.toThrow('Refresh token reuse detected');
-    await expect(service.refresh(r1.refreshToken)).rejects.toThrow('Session expired');
+    await expect(service.refresh(r1.refreshToken)).rejects.toThrow('Refresh token reuse detected');
   });
 
   it('logs out the entire session', async () => {
