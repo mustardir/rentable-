@@ -8,7 +8,7 @@ export class LedgerService {
 
   constructor(private readonly prisma: PrismaService) {}
 
-  async getAccountBalance(accountId: string): Promise<{ accountId: string; balanceKobo: string }> {
+  private async calculateAccountBalance(accountId: string): Promise<string> {
     const account = await this.prisma.account.findUnique({ where: { id: accountId } });
     if (!account) throw new NotFoundException('ACCOUNT_NOT_FOUND');
 
@@ -37,9 +37,24 @@ export class LedgerService {
       createdAt: entry.createdAt,
     }));
 
+    return this.balanceService.getAccountBalance(accountId, domainEntries).toString();
+  }
+
+  async getMyBalance(userId: string): Promise<{ accountId: string; currency: string; balanceKobo: string }> {
+    const mapping = await this.prisma.userLedgerAccount.findFirst({
+      where: { userId, isActive: true },
+      orderBy: { createdAt: 'asc' },
+    });
+    if (!mapping) throw new NotFoundException('LEDGER_ACCOUNT_NOT_FOUND');
+
     return {
-      accountId,
-      balanceKobo: this.balanceService.getAccountBalance(accountId, domainEntries).toString(),
+      accountId: mapping.accountId,
+      currency: mapping.currency,
+      balanceKobo: await this.calculateAccountBalance(mapping.accountId),
     };
+  }
+
+  async getAccountBalance(accountId: string): Promise<{ accountId: string; balanceKobo: string }> {
+    return { accountId, balanceKobo: await this.calculateAccountBalance(accountId) };
   }
 }
