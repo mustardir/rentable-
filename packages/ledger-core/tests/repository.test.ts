@@ -53,7 +53,12 @@ describe("InMemoryRepository", () => {
 
   it("persists a reversal atomically and keeps the original POSTED", async () => {
     const original = buildEntry(engine, "r-original");
-    const reversal = { ...original, id: "reversal-id-xyz", idempotencyKey: "r-reversal", reversalOfId: original.id, reversedById: undefined };
+    const reversal = {
+      ...original,
+      id: "reversal-id-xyz",
+      idempotencyKey: "r-reversal",
+      reversalOfId: original.id,
+    };
     await repo.saveEntry(original);
     await repo.saveReversal(original.id, reversal);
     const found = await repo.findEntryById(original.id);
@@ -69,8 +74,18 @@ describe("InMemoryRepository", () => {
 
   it("rejects a second reversal", async () => {
     const original = buildEntry(engine, "double-original");
-    const first = { ...original, id: "reversal-1", idempotencyKey: "double-reversal-1", reversalOfId: original.id, reversedById: undefined };
-    const second = { ...original, id: "reversal-2", idempotencyKey: "double-reversal-2", reversalOfId: original.id, reversedById: undefined };
+    const first = {
+      ...original,
+      id: "reversal-1",
+      idempotencyKey: "double-reversal-1",
+      reversalOfId: original.id,
+    };
+    const second = {
+      ...original,
+      id: "reversal-2",
+      idempotencyKey: "double-reversal-2",
+      reversalOfId: original.id,
+    };
     await repo.saveEntry(original);
     await repo.saveReversal(original.id, first);
     await expect(repo.saveReversal(original.id, second)).rejects.toThrow("ALREADY_REVERSED:double-original");
