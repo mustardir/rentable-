@@ -3,14 +3,14 @@ import { EntryStatus, Prisma } from '@prisma/client';
 import type { JournalEntry, JournalLine, Repository } from '@fortress/ledger-core';
 import { PrismaService } from '../prisma/prisma.service';
 
-type PrismaTransaction = Omit<PrismaService, '$connect' | '$disconnect' | '$on' | '$transaction' | '$use' | '$extends'>;
+type PrismaTransaction = Prisma.TransactionClient;
 type JournalEntryWithLines = Prisma.JournalEntryGetPayload<{ include: { lines: true } }>;
 
 @Injectable()
 export class PrismaLedgerRepository implements Repository {
   constructor(private readonly prisma: PrismaService) {}
 
-  async saveEntry(entry: JournalEntry, tx: PrismaTransaction = this.prisma): Promise<void> {
+  async saveEntry(entry: JournalEntry, tx: PrismaTransaction | PrismaService = this.prisma): Promise<void> {
     await tx.journalEntry.create({
       data: {
         id: entry.id,
@@ -54,9 +54,6 @@ export class PrismaLedgerRepository implements Repository {
 
   async saveReversal(originalEntryId: string, reversal: JournalEntry): Promise<void> {
     await this.prisma.$transaction(async (tx) => {
-      // Claim the original first. The conditional update prevents two concurrent
-      // reversals from both succeeding. The transaction rolls back the claim if
-      // creating the reversal fails for any reason.
       const claimed = await tx.journalEntry.updateMany({
         where: {
           id: originalEntryId,
