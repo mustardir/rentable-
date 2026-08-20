@@ -85,6 +85,20 @@ export class AuthService {
     return { refreshJwt, tokenId };
   }
 
+  private async revokeSession(sessionId: string) {
+    const now = new Date();
+    await this.prisma.$transaction(async (tx) => {
+      await tx.session.updateMany({
+        where: { id: sessionId, revokedAt: null },
+        data: { revokedAt: now },
+      });
+      await tx.refreshToken.updateMany({
+        where: { sessionId, revokedAt: null },
+        data: { revokedAt: now },
+      });
+    });
+  }
+
   async login(email: string, password: string, ip?: string, userAgent?: string) {
     const user = await this.prisma.user.findUnique({ where: { email } });
     if (!user || !user.isActive) throw new UnauthorizedException('Invalid credentials');
@@ -119,52 +133,46 @@ export class AuthService {
     assertJwtConfiguration();
 
     try {
-      return await this.prisma.$transaction(async (tx) => {
-        const decoded = jwt.verify(oldRefreshJwt, JWT_REFRESH_SECRET);
-        const tokenId = decoded?.jti;
-        if (!tokenId) throw new UnauthorizedException('Invalid token');
+      const decoded = jwt.verify(oldRefreshJwt, JWT_REFRESH_SECRET);
+      const tokenId = decoded?.jti;
+      if (!tokenId) throw new UnauthorizedException('Invalid token');
 
-        const dbToken = await tx.refreshToken.findUnique({ where: { id: tokenId } });
-        if (!dbToken) throw new UnauthorizedException('Invalid token');
+      const dbToken = await this.prisma.refreshToken.findUnique({ where: { id: tokenId } });
+      if (!dbToken) throw new UnauthorizedException('Invalid token');
 
-        if (dbToken.revokedAt) {
-          if (dbToken.sessionId) {
-            await tx.session.updateMany({
-              where: { id: dbToken.sessionId, revokedAt: null },
-              data: { revokedAt: new Date() },
-            });
-            await tx.refreshToken.updateMany({
-              where: { sessionId: dbToken.sessionId, revokedAt: null },
-              data: { revokedAt: new Date() },
-            });
-          }
-          throw new UnauthorizedException('Refresh token reuse detected');
-        }
+      if (dbToken.revokedAt) {
+        if (dbToken.sessionId) await this.revokeSession(dbToken.sessionId);
+        throw new UnauthorizedException('Refresh token reuse detected');
+      }
 
-        if (dbToken.expiresAt.getTime() <= Date.now()) {
-          throw new UnauthorizedException('Token expired');
-        }
+      if (dbToken.expiresAt.getTime() <= Date.now()) {
+        throw new UnauthorizedException('Token expired');
+      }
 
-        if (!dbToken.sessionId) throw new UnauthorizedException('Invalid session');
-        const session = await tx.session.findUnique({ where: { id: dbToken.sessionId } });
-        if (!session || session.revokedAt || session.expiresAt.getTime() <= Date.now()) {
-          throw new UnauthorizedException('Session expired');
-        }
+      if (!dbToken.sessionId) throw new UnauthorizedException('Invalid session');
 
-        const user = await tx.user.findUnique({ where: { id: dbToken.userId } });
-        if (!user || !user.isActive) throw new UnauthorizedException('User is inactive');
+      const session = await this.prisma.session.findUnique({ where: { id: dbToken.sessionId } });
+      if (!session || session.revokedAt || session.expiresAt.getTime() <= Date.now()) {
+        throw new UnauthorizedException('Session expired');
+      }
 
-        const match = await bcrypt.compare(oldRefreshJwt, dbToken.tokenHash);
-        if (!match) throw new UnauthorizedException('Invalid token');
+      const user = await this.prisma.user.findUnique({ where: { id: dbToken.userId } });
+      if (!user || !user.isActive) throw new UnauthorizedException('User is inactive');
 
+      const match = await bcrypt.compare(oldRefreshJwt, dbToken.tokenHash);
+      if (!match) throw new UnauthorizedException('Invalid token');
+
+      const result = await this.prisma.$transaction(async (tx) => {
+        // Atomically claim the token. Only one concurrent refresh can win.
         const claimed = await tx.refreshToken.updateMany({
           where: { id: dbToken.id, revokedAt: null },
           data: { revokedAt: new Date() },
         });
-        if (claimed.count !== 1) throw new UnauthorizedException('Refresh token reuse detected');
+
+        if (claimed.count !== 1) return null;
 
         const { refreshJwt: newRefresh, tokenId: newTokenId } =
-          await this.createAndStoreRefreshToken(dbToken.userId, dbToken.sessionId, tx);
+          await this.createAndStoreRefreshToken(dbToken.userId, dbToken.sessionId!, tx);
 
         await tx.refreshToken.update({
           where: { id: dbToken.id },
@@ -174,6 +182,13 @@ export class AuthService {
         const accessToken = await this.signAccessToken(dbToken.userId);
         return { accessToken, refreshToken: newRefresh };
       });
+
+      if (!result) {
+        await this.revokeSession(dbToken.sessionId);
+        throw new UnauthorizedException('Refresh token reuse detected');
+      }
+
+      return result;
     } catch (err) {
       if (err instanceof UnauthorizedException) throw err;
       throw new UnauthorizedException('Invalid token');
@@ -189,26 +204,17 @@ export class AuthService {
       const tokenId = decoded?.jti;
       if (!tokenId) return { success: true };
 
-      await this.prisma.$transaction(async (tx) => {
-        const token = await tx.refreshToken.findUnique({ where: { id: tokenId } });
-        if (!token) return;
+      const token = await this.prisma.refreshToken.findUnique({ where: { id: tokenId } });
+      if (!token) return { success: true };
 
-        if (token.sessionId) {
-          await tx.session.updateMany({
-            where: { id: token.sessionId, revokedAt: null },
-            data: { revokedAt: new Date() },
-          });
-          await tx.refreshToken.updateMany({
-            where: { sessionId: token.sessionId, revokedAt: null },
-            data: { revokedAt: new Date() },
-          });
-        } else {
-          await tx.refreshToken.updateMany({
-            where: { id: token.id, revokedAt: null },
-            data: { revokedAt: new Date() },
-          });
-        }
-      });
+      if (token.sessionId) {
+        await this.revokeSession(token.sessionId);
+      } else {
+        await this.prisma.refreshToken.updateMany({
+          where: { id: token.id, revokedAt: null },
+          data: { revokedAt: new Date() },
+        });
+      }
     } catch (_err) {
       // Logout is intentionally idempotent and does not reveal token validity.
     }
