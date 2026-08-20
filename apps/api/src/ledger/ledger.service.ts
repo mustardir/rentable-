@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { BalanceService } from '@fortress/ledger-core';
+import { BalanceService, type JournalEntryStatus } from '@fortress/ledger-core';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
@@ -21,7 +21,7 @@ export class LedgerService {
     const domainEntries = entries.map((entry) => ({
       id: entry.id,
       idempotencyKey: entry.idempotencyKey,
-      status: entry.status,
+      status: entry.status as JournalEntryStatus,
       lines: entry.lines.map((line) => ({
         id: line.id,
         journalEntryId: line.journalEntryId,
@@ -52,9 +52,5 @@ export class LedgerService {
       currency: mapping.currency,
       balanceKobo: await this.calculateAccountBalance(mapping.accountId),
     };
-  }
-
-  async getAccountBalance(accountId: string): Promise<{ accountId: string; balanceKobo: string }> {
-    return { accountId, balanceKobo: await this.calculateAccountBalance(accountId) };
   }
 }
