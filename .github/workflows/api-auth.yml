@@ -16,6 +16,23 @@ permissions:
 jobs:
   api-auth:
     runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/fortress_fund_test
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: fortress_fund_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d fortress_fund_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
 
     steps:
       - name: Checkout
@@ -40,8 +57,11 @@ jobs:
       - name: Generate Prisma client
         run: pnpm --filter @fortress-fund/api prisma:generate
 
+      - name: Apply Prisma migrations
+        run: pnpm --filter @fortress-fund/api prisma:migrate:deploy
+
       - name: Build API
         run: pnpm --filter @fortress-fund/api build
 
-      - name: Run authentication tests
+      - name: Run authentication and ledger integration tests
         run: pnpm --filter @fortress-fund/api test
