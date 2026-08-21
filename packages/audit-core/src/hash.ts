@@ -12,7 +12,7 @@ function canonicalize(value: JsonValue): string {
   }
 
   const entries = Object.entries(value).sort(([a], [b]) => a.localeCompare(b));
-  return `{${entries.map(([key, child]) => `${JSON.stringify(key)}:${canonicalize(child)}`).join(",`)}}`;
+  return `{${entries.map(([key, child]) => `${JSON.stringify(key)}:${canonicalize(child)}`).join(",")}}`;
 }
 
 export function canonicalPayload(payload: JsonValue): string {
