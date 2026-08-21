@@ -79,15 +79,15 @@ describe("AuditStore", () => {
       entityId: "entry_1",
       payload: { amountKobo: 100_000 },
     });
-    await store.append({
+    const second = await store.append({
       eventType: "deposit.confirmed",
       entityType: "JournalEntry",
       entityId: "entry_1",
       payload: { status: "POSTED" },
     });
 
-    const internal = store as unknown as { events: Array<{ payload: { status?: string } }> };
-    internal.events[1]!.payload.status = "TAMPERED";
+    const internal = store as unknown as { events: Array<typeof second> };
+    internal.events[1] = { ...second, hash: "tampered" };
 
     expect(store.verify()).toMatchObject({ valid: false, reason: "HASH_MISMATCH" });
   });
