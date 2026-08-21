@@ -13,3 +13,5 @@ Pure-TypeScript foundation for Fortress Fund's append-only, tamper-evident audit
 - Event snapshots are frozen and returned payloads are cloned, preventing ordinary caller mutation.
 
 This package is intentionally independent of NestJS and Prisma. Database persistence will be added at the application/database boundary after the core invariants are established.
+
+CI checkpoint: canonical hash implementation fixed; workflow rerun expected on the updated branch.
