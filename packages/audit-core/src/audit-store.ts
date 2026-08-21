@@ -1,14 +1,22 @@
 import { randomUUID } from "node:crypto";
 
 import { computeAuditHash } from "./hash";
-import type { AuditEvent, AuditEventInput, AuditVerification } from "./types";
+import type { AuditEvent, AuditEventInput, AuditVerification, JsonValue } from "./types";
 
 function cloneJson<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
 }
 
+function deepFreeze(value: JsonValue): JsonValue {
+  if (value !== null && typeof value === "object") {
+    Object.values(value).forEach((child) => deepFreeze(child));
+    Object.freeze(value);
+  }
+  return value;
+}
+
 function freezeEvent(event: AuditEvent): AuditEvent {
-  Object.freeze(event.payload);
+  deepFreeze(event.payload);
   return Object.freeze(event);
 }
 
@@ -25,7 +33,7 @@ export class AuditStore {
     const sequence = this.sequence + 1n;
     const entityKey = `${input.entityType}:${input.entityId}`;
     const previousHash = this.lastHashByEntity.get(entityKey) ?? null;
-    const event: AuditEvent = {
+    const draft = {
       id: randomUUID(),
       sequence,
       actorUserId: input.actorUserId ?? null,
@@ -35,11 +43,13 @@ export class AuditStore {
       entityId: input.entityId,
       payload: cloneJson(input.payload),
       previousHash,
-      hash: "",
       createdAt: new Date(input.createdAt?.getTime() ?? Date.now()),
     };
 
-    event.hash = computeAuditHash(event);
+    const event: AuditEvent = {
+      ...draft,
+      hash: computeAuditHash(draft),
+    };
     const frozen = freezeEvent(event);
     this.events.push(frozen);
     this.sequence = sequence;
