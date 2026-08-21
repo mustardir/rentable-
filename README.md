@@ -73,3 +73,4 @@ docker compose up -d --build
 
 - This milestone focuses on infrastructure and observability foundations while preserving the existing monorepo layout.
 - Subsequent milestones will implement backend auth/ledger services and frontend fintech product experiences.
+- CI trigger verification checkpoint for the reversal-balance test branch.
