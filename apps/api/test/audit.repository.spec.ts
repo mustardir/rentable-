@@ -21,7 +21,7 @@ describePrisma('PrismaAuditRepository', () => {
     await prisma.$disconnect();
   });
 
-  const input = (entityType: string, entityId: string, eventType: string, payload: Record<string, unknown>): AuditEventInput => ({
+  const input = (entityType: string, entityId: string, eventType: string, payload: AuditEventInput['payload']): AuditEventInput => ({
     actorUserId: 'test-user',
     actorRole: 'ADMIN',
     eventType,
