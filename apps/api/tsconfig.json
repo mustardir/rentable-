@@ -22,6 +22,9 @@
     "paths": {
       "@fortress/ledger-core": [
         "../../packages/ledger-core/src/index.ts"
+      ],
+      "@fortress/audit-core": [
+        "../../packages/audit-core/src/index.ts"
       ]
     }
   },
