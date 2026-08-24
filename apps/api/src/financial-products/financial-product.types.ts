@@ -9,8 +9,8 @@ export interface FinancialProduct {
   readonly type: FinancialProductType;
   readonly description: string | null;
   readonly currency: string;
-  /** Minimum subscription amount in integer kobo. */
-  readonly minimumAmountKobo: bigint;
+  /** Minimum subscription amount in integer minor currency units. */
+  readonly minimumAmountMinor: bigint;
   readonly status: FinancialProductStatus;
   readonly metadata: Readonly<Record<string, unknown>>;
   readonly createdAt: Date;
@@ -23,7 +23,7 @@ export interface CreateFinancialProductInput {
   readonly type: FinancialProductType;
   readonly description?: string | null;
   readonly currency?: string;
-  readonly minimumAmountKobo: bigint;
+  readonly minimumAmountMinor: bigint;
   readonly status?: FinancialProductStatus;
   readonly metadata?: Readonly<Record<string, unknown>>;
 }
