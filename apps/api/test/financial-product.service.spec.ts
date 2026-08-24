@@ -1,3 +1,4 @@
+import { describe, expect, it } from 'vitest';
 import { FinancialProductService } from '../src/financial-products/financial-product.service';
 import type {
   CreateFinancialProductInput,
