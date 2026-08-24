@@ -7,7 +7,7 @@ export class FinancialProductService {
   async create(input: CreateFinancialProductInput): Promise<FinancialProduct> {
     if (!input.code.trim()) throw new Error('INVALID_PRODUCT_CODE');
     if (!input.name.trim()) throw new Error('INVALID_PRODUCT_NAME');
-    if (input.minimumAmountKobo < 0n) throw new Error('INVALID_MINIMUM_AMOUNT');
+    if (input.minimumAmountMinor < 0n) throw new Error('INVALID_MINIMUM_AMOUNT');
     return this.repository.create(input);
   }
 
