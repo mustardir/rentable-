@@ -1,3 +1,4 @@
+import { describe, expect, it } from 'vitest';
 import { DEFAULT_USD_INVESTMENT_MINIMUM_MINOR } from '../src/financial-products/financial-product.defaults';
 
 describe('financial product defaults', () => {
