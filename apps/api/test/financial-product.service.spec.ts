@@ -7,14 +7,14 @@ import type { FinancialProductRepository } from '../src/financial-products/finan
 
 const product: FinancialProduct = {
   id: 'product-1',
-  code: 'FORT-SAVE-001',
-  name: 'Fortress Savings',
-  type: 'SAVINGS',
-  description: 'Test savings product',
-  currency: 'NGN',
-  minimumAmountKobo: 100_000n,
+  code: 'FORT-INVEST-001',
+  name: 'Fortress Investment',
+  type: 'INVESTMENT',
+  description: 'Primary-market investment product',
+  currency: 'USD',
+  minimumAmountMinor: 5_000n,
   status: 'ACTIVE',
-  metadata: { rateBps: 1200 },
+  metadata: {},
   createdAt: new Date('2026-08-21T00:00:00.000Z'),
   updatedAt: new Date('2026-08-21T00:00:00.000Z'),
 };
@@ -41,18 +41,20 @@ class FakeFinancialProductRepository implements FinancialProductRepository {
 }
 
 describe('FinancialProductService', () => {
-  it('creates a product and preserves integer kobo amounts', async () => {
+  it('supports a $50 USD minimum investment using integer cents', async () => {
     const repository = new FakeFinancialProductRepository();
     const service = new FinancialProductService(repository);
     const input: CreateFinancialProductInput = {
       code: product.code,
       name: product.name,
       type: product.type,
-      minimumAmountKobo: 250_000n,
+      currency: 'USD',
+      minimumAmountMinor: 5_000n,
     };
 
     await expect(service.create(input)).resolves.toBe(product);
-    expect(repository.created[0]?.minimumAmountKobo).toBe(250_000n);
+    expect(repository.created[0]?.currency).toBe('USD');
+    expect(repository.created[0]?.minimumAmountMinor).toBe(5_000n);
   });
 
   it('rejects an empty product code', async () => {
@@ -61,9 +63,10 @@ describe('FinancialProductService', () => {
     await expect(
       service.create({
         code: '   ',
-        name: 'Fortress Savings',
-        type: 'SAVINGS',
-        minimumAmountKobo: 1n,
+        name: 'Fortress Investment',
+        type: 'INVESTMENT',
+        currency: 'USD',
+        minimumAmountMinor: 5_000n,
       }),
     ).rejects.toThrow('INVALID_PRODUCT_CODE');
   });
@@ -73,10 +76,11 @@ describe('FinancialProductService', () => {
 
     await expect(
       service.create({
-        code: 'FORT-SAVE-001',
+        code: 'FORT-INVEST-001',
         name: '   ',
-        type: 'SAVINGS',
-        minimumAmountKobo: 1n,
+        type: 'INVESTMENT',
+        currency: 'USD',
+        minimumAmountMinor: 5_000n,
       }),
     ).rejects.toThrow('INVALID_PRODUCT_NAME');
   });
@@ -86,10 +90,11 @@ describe('FinancialProductService', () => {
 
     await expect(
       service.create({
-        code: 'FORT-SAVE-001',
-        name: 'Fortress Savings',
-        type: 'SAVINGS',
-        minimumAmountKobo: -1n,
+        code: 'FORT-INVEST-001',
+        name: 'Fortress Investment',
+        type: 'INVESTMENT',
+        currency: 'USD',
+        minimumAmountMinor: -1n,
       }),
     ).rejects.toThrow('INVALID_MINIMUM_AMOUNT');
   });
