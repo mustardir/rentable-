@@ -18,12 +18,16 @@ describe('DocumentTemplatePipeline', () => {
       type: 'INVESTMENT_CONFIRMATION',
       data: {
         title: 'Fortress Funds Investment Confirmation',
+        investorName: 'Synthetic Investor',
         confirmationReference: 'TEST-0001',
         productName: 'Synthetic Investment Product',
         productCode: 'SYNTH-001',
         currency: 'USD',
         amountMinor: 5000n,
-        confirmedAt: '2026-08-23T00:00:00.000Z',
+        investmentDate: '2026-08-23',
+        tenorDays: 365,
+        maturityDate: '2027-08-23',
+        generatedAt: '2026-08-23T00:00:00.000Z',
       },
     });
 
