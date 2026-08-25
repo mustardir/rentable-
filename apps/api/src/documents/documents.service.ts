@@ -1,7 +1,7 @@
 import type {
   DocumentRequest,
   GeneratedDocument,
-} from '../../../../packages/document-core/src';
+} from '@fortress/document-core';
 
 export class DocumentsService {
   async generate(_request: DocumentRequest): Promise<GeneratedDocument> {
