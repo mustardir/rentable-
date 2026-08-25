@@ -67,4 +67,4 @@ jobs:
         run: pnpm --filter @fortress-fund/api test
 
       - name: Run financial product and DOCX unit tests
-        run: pnpm --filter @fortress-fund/api test:vitest test/financial-product.defaults.spec.ts test/financial-product.service.spec.ts test/document-core.docx.spec.ts
+        run: pnpm --filter @fortress-fund/api test:vitest test/financial-product.defaults.spec.ts test/financial-product.service.spec.ts test/document-core.docx.spec.ts test/document-template.pipeline.spec.ts
