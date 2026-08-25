@@ -65,3 +65,6 @@ jobs:
 
       - name: Run authentication and ledger integration tests
         run: pnpm --filter @fortress-fund/api test
+
+      - name: Run financial product unit tests
+        run: pnpm --filter @fortress-fund/api test:vitest -- test/financial-product.defaults.spec.ts test/financial-product.service.spec.ts
