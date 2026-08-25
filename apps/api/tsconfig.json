@@ -25,6 +25,9 @@
       ],
       "@fortress/audit-core": [
         "../../packages/audit-core/src/index.ts"
+      ],
+      "@fortress/document-core": [
+        "../../packages/document-core/src/index.ts"
       ]
     }
   },
