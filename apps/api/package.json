@@ -20,6 +20,7 @@
     "@nestjs/platform-express": "^10.4.8",
     "@prisma/client": "^5.22.0",
     "@fortress/audit-core": "workspace:*",
+    "@fortress/document-core": "workspace:*",
     "@fortress/ledger-core": "workspace:*",
     "@nestjs/jwt": "^10.1.0",
     "@nestjs/passport": "^11.0.5",
