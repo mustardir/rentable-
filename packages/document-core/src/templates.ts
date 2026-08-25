@@ -1,6 +1,6 @@
 import type { DocumentFormat, DocumentRequest, DocumentType } from './types';
 
-export interface DocumentTemplate<TData extends Record<string, unknown> = Record<string, unknown>> {
+export interface DocumentTemplate<TData = unknown> {
   readonly id: string;
   readonly version: number;
   readonly type: DocumentType;
@@ -10,15 +10,15 @@ export interface DocumentTemplate<TData extends Record<string, unknown> = Record
 }
 
 export interface DocumentTemplateRegistry {
-  register(template: DocumentTemplate): void;
-  get(id: string, version?: number): DocumentTemplate | null;
+  register<TData>(template: DocumentTemplate<TData>): void;
+  get<TData = unknown>(id: string, version?: number): DocumentTemplate<TData> | null;
   list(type?: DocumentType): readonly DocumentTemplate[];
 }
 
 export class InMemoryDocumentTemplateRegistry implements DocumentTemplateRegistry {
   private readonly templates = new Map<string, DocumentTemplate>();
 
-  register(template: DocumentTemplate): void {
+  register<TData>(template: DocumentTemplate<TData>): void {
     if (!template.id.trim()) throw new Error('INVALID_TEMPLATE_ID');
     if (!Number.isInteger(template.version) || template.version < 1) {
       throw new Error('INVALID_TEMPLATE_VERSION');
@@ -30,12 +30,12 @@ export class InMemoryDocumentTemplateRegistry implements DocumentTemplateRegistr
     this.templates.set(key, template);
   }
 
-  get(id: string, version?: number): DocumentTemplate | null {
-    if (version !== undefined) return this.templates.get(`${id}@${version}`) ?? null;
+  get<TData = unknown>(id: string, version?: number): DocumentTemplate<TData> | null {
+    if (version !== undefined) return (this.templates.get(`${id}@${version}`) as DocumentTemplate<TData> | undefined) ?? null;
 
-    return [...this.templates.values()]
+    return ([...this.templates.values()]
       .filter((template) => template.id === id)
-      .sort((a, b) => b.version - a.version)[0] ?? null;
+      .sort((a, b) => b.version - a.version)[0] as DocumentTemplate<TData> | undefined) ?? null;
   }
 
   list(type?: DocumentType): readonly DocumentTemplate[] {
