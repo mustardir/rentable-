@@ -65,6 +65,12 @@ jobs:
 
       - name: Run authentication and ledger integration tests
         run: pnpm --filter @fortress-fund/api test
+        env:
+          JEST_TEST_PATH_IGNORE: >-
+            --testPathIgnorePatterns=financial-product\\.defaults\\.spec\\.ts
+            --testPathIgnorePatterns=financial-product\\.service\\.spec\\.ts
+            --testPathIgnorePatterns=document-core\\.docx\\.spec\\.ts
+            --testPathIgnorePatterns=document-template\\.pipeline\\.spec\\.ts
 
       - name: Run financial product and DOCX unit tests
-        run: pnpm --filter @fortress-fund/api test:vitest test/financial-product.defaults.spec.ts test/financial-product.service.spec.ts test/document-core.docx.spec.ts
+        run: pnpm --filter @fortress-fund/api test:vitest test/financial-product.defaults.spec.ts test/financial-product.service.spec.ts test/document-core.docx.spec.ts test/document-template.pipeline.spec.ts
