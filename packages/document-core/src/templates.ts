@@ -1,6 +1,6 @@
 import type { DocumentFormat, DocumentRequest, DocumentType } from './types';
 
-export interface DocumentTemplate<TData extends Record<string, unknown> = Record<string, unknown>> {
+export interface DocumentTemplate<TData = Record<string, unknown>> {
   readonly id: string;
   readonly version: number;
   readonly type: DocumentType;
