@@ -1,75 +1,50 @@
-import { NextRequest, NextResponse } from "next/server";
-import bcrypt from "bcryptjs";
-import { prisma } from "@/lib/prisma";
+import { NextResponse } from "next/server";
 
-export async function POST(req: NextRequest) {
-try {
-const body = await req.json();
+const API_BASE_URL = process.env.FORTRESS_API_URL ?? process.env.NEXT_PUBLIC_API_URL;
 
-const { email, password } = body;
+export async function POST(request: Request) {
+  if (!API_BASE_URL) {
+    return NextResponse.json(
+      { success: false, message: "Authentication service is not configured" },
+      { status: 503 },
+    );
+  }
 
-if (!email || !password) {
-  return NextResponse.json(
-    {
-      success: false,
-      message: "Email and password are required",
-    },
-    { status: 400 }
-  );
-}
+  const body = await request.json();
+  const response = await fetch(`${API_BASE_URL.replace(/\/$/, "")}/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+    cache: "no-store",
+  });
 
-const user = await prisma.user.findUnique({
-  where: {
-    email: email.toLowerCase(),
-  },
-});
-
-if (!user) {
-  return NextResponse.json(
-    {
-      success: false,
-      message: "Invalid credentials",
-    },
-    { status: 401 }
-  );
-}
-
-const validPassword = await bcrypt.compare(
-  password,
-  user.passwordHash
-);
-
-if (!validPassword) {
-  return NextResponse.json(
-    {
-      success: false,
-      message: "Invalid credentials",
-    },
-    { status: 401 }
-  );
-}
-
-return NextResponse.json({
-  success: true,
-  message: "Login successful",
-  user: {
-    id: user.id,
-    firstName: user.firstName,
-    lastName: user.lastName,
-    email: user.email,
-  },
-});
-
-} catch (error) {
-console.error(error);
-
-return NextResponse.json(
-  {
+  const data = await response.json().catch(() => ({
     success: false,
-    message: "Login failed",
-  },
-  { status: 500 }
-);
+    message: "Authentication request failed",
+  }));
 
-}
+  if (!response.ok) {
+    return NextResponse.json(data, { status: response.status });
+  }
+
+  const result = NextResponse.json({ success: true, user: data.user });
+  const secure = process.env.NODE_ENV === "production";
+
+  result.cookies.set("fortress_access_token", data.accessToken, {
+    httpOnly: true,
+    secure,
+    sameSite: "lax",
+    path: "/",
+    maxAge: 15 * 60,
+  });
+
+  result.cookies.set("fortress_refresh_token", data.refreshToken, {
+    httpOnly: true,
+    secure,
+    sameSite: "lax",
+    path: "/",
+    maxAge: 30 * 24 * 60 * 60,
+  });
+
+  return result;
 }
