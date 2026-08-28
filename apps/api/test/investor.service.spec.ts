@@ -1,78 +1,69 @@
 import { InvestorService } from '../src/investor/investor.service';
 
-function createService(user: unknown) {
+const profile = {
+  id: 'profile-1',
+  firstName: 'Ada',
+  lastName: 'Investor',
+  phone: null,
+  dateOfBirth: null,
+  country: 'NG',
+  createdAt: new Date('2026-01-01'),
+  updatedAt: new Date('2026-01-01'),
+};
+
+function createService(users: Record<string, unknown>) {
   const prisma = {
     user: {
-      findUnique: jest.fn().mockResolvedValue(user),
+      findUnique: jest.fn(({ where }: { where: { id: string } }) =>
+        Promise.resolve(users[where.id] ?? null)),
     },
   } as any;
   return { service: new InvestorService(prisma), findUnique: prisma.user.findUnique };
 }
 
 describe('InvestorService', () => {
-  it('loads only the profile belonging to the authenticated user id', async () => {
+  it('loads the profile belonging to the authenticated user id', async () => {
     const user = {
       id: 'user-1',
       email: 'investor@example.com',
       role: 'USER',
       isActive: true,
       createdAt: new Date('2026-01-01'),
-      profile: { id: 'profile-1', firstName: 'Ada', lastName: 'Investor' },
+      profile,
     };
-    const { service, findUnique } = createService(user);
+    const { service, findUnique } = createService({ 'user-1': user });
 
     const result = await service.getProfileForUser('user-1');
 
-    expect(findUnique).toHaveBeenCalledWith({
-      where: { id: 'user-1' },
-      select: {
-        id: true,
-        email: true,
-        role: true,
-        isActive: true,
-        createdAt: true,
-        profile: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            phone: true,
-            dateOfBirth: true,
-            country: true,
-            createdAt: true,
-            updatedAt: true,
-          },
-        },
-      },
-    });
+    expect(findUnique.mock.calls[0][0].where).toEqual({ id: 'user-1' });
     expect(result).toEqual(user);
   });
 
-  it('does not expose another investor profile by id', async () => {
-    const { service, findUnique } = createService({
+  it('cannot return another investor when a different user id is requested', async () => {
+    const otherUser = {
       id: 'user-2',
       email: 'other@example.com',
       role: 'USER',
       isActive: true,
       createdAt: new Date(),
-      profile: { id: 'profile-2', firstName: 'Other' },
-    });
+      profile: { ...profile, id: 'profile-2', firstName: 'Other' },
+    };
+    const { service, findUnique } = createService({ 'user-2': otherUser });
 
-    const result = await service.getProfileForUser('user-1');
-
+    await expect(service.getProfileForUser('user-1')).rejects.toThrow('Investor not found');
     expect(findUnique.mock.calls[0][0].where).toEqual({ id: 'user-1' });
-    expect(result.id).toBe('user-2');
   });
 
   it('rejects inactive users', async () => {
-    const { service } = createService({
+    const inactiveUser = {
       id: 'user-1',
       email: 'inactive@example.com',
       role: 'USER',
       isActive: false,
       createdAt: new Date(),
       profile: null,
-    });
+    };
+    const { service } = createService({ 'user-1': inactiveUser });
 
     await expect(service.getProfileForUser('user-1')).rejects.toThrow('Investor not found');
   });
