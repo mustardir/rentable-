@@ -6,8 +6,9 @@ import { LedgerModule } from './ledger/ledger.module';
 import { TransfersModule } from './transfers/transfers.module';
 import { AuditModule } from './audit/audit.module';
 import { DocumentsModule } from './documents/documents.module';
+import { InvestorModule } from './investor/investor.module';
 
 @Module({
-  imports: [PrismaModule, AuthModule, HealthModule, LedgerModule, TransfersModule, AuditModule, DocumentsModule],
+  imports: [PrismaModule, AuthModule, HealthModule, LedgerModule, TransfersModule, AuditModule, DocumentsModule, InvestorModule],
 })
 export class AppModule {}
