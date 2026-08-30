@@ -9,6 +9,7 @@ on:
     branches:
       - main
       - feature/production-authentication
+  workflow_dispatch:
 
 permissions:
   contents: read
