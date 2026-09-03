@@ -1,14 +1,13 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { PostingEngine } from '@fortress/ledger-core';
-import { EntryStatus, TransactionStatus, TransactionType } from '@prisma/client';
+import { EntryStatus, Prisma, TransactionStatus, TransactionType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { PrismaAuditRepository } from '../audit/prisma-audit.repository';
 import type { CreateWalletRequestDto } from './dto/create-wallet-request.dto';
 
 const INVESTOR_CASH_ACCOUNT_ID = 'acct_1100';
 const CUSTOMER_DEPOSITS_ACCOUNT_ID = 'acct_2100';
-
-type WalletTransactionClient = Parameters<Parameters<PrismaService['$transaction']>[0]>[0];
+type WalletTransactionClient = Prisma.TransactionClient;
 
 @Injectable()
 export class WalletService {
