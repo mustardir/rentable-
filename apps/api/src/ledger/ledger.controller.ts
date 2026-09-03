@@ -1,4 +1,4 @@
-import { Controller, Get, Req, UseGuards } from '@nestjs/common';
+import { Controller, Get, Query, Req, UseGuards } from '@nestjs/common';
 import { Request } from 'express';
 import { LedgerService } from './ledger.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -15,5 +15,11 @@ export class LedgerController {
   @Get('me/balance')
   getMyBalance(@Req() req: AuthenticatedRequest) {
     return this.ledgerService.getMyBalance(req.user.id);
+  }
+
+  @Get('me/transactions')
+  getMyTransactions(@Req() req: AuthenticatedRequest, @Query('limit') limit?: string) {
+    const parsedLimit = limit === undefined ? 20 : Number(limit);
+    return this.ledgerService.getMyTransactions(req.user.id, parsedLimit);
   }
 }
