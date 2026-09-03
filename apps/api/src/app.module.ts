@@ -4,11 +4,12 @@ import { HealthModule } from './health/health.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { LedgerModule } from './ledger/ledger.module';
 import { TransfersModule } from './transfers/transfers.module';
+import { WalletModule } from './wallet/wallet.module';
 import { AuditModule } from './audit/audit.module';
 import { DocumentsModule } from './documents/documents.module';
 import { InvestorModule } from './investor/investor.module';
 
 @Module({
-  imports: [PrismaModule, AuthModule, HealthModule, LedgerModule, TransfersModule, AuditModule, DocumentsModule, InvestorModule],
+  imports: [PrismaModule, AuthModule, HealthModule, LedgerModule, TransfersModule, WalletModule, AuditModule, DocumentsModule, InvestorModule],
 })
 export class AppModule {}
