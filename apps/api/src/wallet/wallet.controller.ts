@@ -10,12 +10,6 @@ interface AuthenticatedRequest extends Request {
   user: { id: string; email: string; role: string };
 }
 
-function assertWalletOperator(req: AuthenticatedRequest) {
-  if (!['ADMIN', 'COMPLIANCE'].includes(req.user.role)) {
-    throw new Error('FORBIDDEN_WALLET_OPERATOR');
-  }
-}
-
 @Controller('wallet')
 @UseGuards(JwtAuthGuard)
 export class WalletController {
@@ -35,9 +29,7 @@ export class WalletController {
 
   @Get('admin/requests')
   async getAdminRequests(@Req() req: AuthenticatedRequest, @Query('limit') rawLimit?: string) {
-    if (!['ADMIN', 'COMPLIANCE'].includes(req.user.role)) {
-      return this.walletService.forbiddenOperator();
-    }
+    if (!['ADMIN', 'COMPLIANCE'].includes(req.user.role)) return this.walletService.forbiddenOperator();
     const parsed = rawLimit ? Number.parseInt(rawLimit, 10) : 50;
     const limit = Number.isFinite(parsed) ? Math.min(100, Math.max(1, parsed)) : 50;
     return this.walletService.getOperatorRequests(limit);
