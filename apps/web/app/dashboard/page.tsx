@@ -3,6 +3,8 @@ import { SiteHeader } from "../components/site-header";
 import { SiteFooter } from "../components/site-footer";
 import { getInvestorBalance } from "../../lib/investor/balance";
 import { getInvestorTransactions } from "../../lib/investor/transactions";
+import { getWalletRequests } from "../../lib/investor/wallet";
+import { WalletActionsPanel } from "./wallet-actions-panel";
 
 const sections = [
   ["Portfolio", "Track your investments and portfolio activity.", "#"],
@@ -25,7 +27,11 @@ function formatKobo(amountKobo: string, currency: string) {
 }
 
 export default async function DashboardPage() {
-  const [balance, transactions] = await Promise.all([getInvestorBalance(), getInvestorTransactions(8)]);
+  const [balance, transactions, walletRequests] = await Promise.all([
+    getInvestorBalance(),
+    getInvestorTransactions(8),
+    getWalletRequests(8),
+  ]);
   const balanceDisplay = balance ? formatKobo(balance.balanceKobo, balance.currency) : "—";
 
   return (
@@ -45,9 +51,11 @@ export default async function DashboardPage() {
           <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-6 sm:col-span-2 lg:col-span-3">
             <p className="text-xs uppercase tracking-wider text-slate-500">Available balance</p>
             <p className="mt-2 text-3xl font-semibold">{balanceDisplay}</p>
-            <p className="mt-2 text-sm text-slate-500">
-              {balance ? "Calculated from posted ledger entries" : "Sign in with an active ledger account to view your balance"}
-            </p>
+            <p className="mt-2 text-sm text-slate-500">{balance ? "Calculated from posted ledger entries" : "Sign in with an active ledger account to view your balance"}</p>
+          </div>
+
+          <div className="sm:col-span-2 lg:col-span-3">
+            {balance ? <WalletActionsPanel requests={walletRequests} balanceKobo={balance.balanceKobo} currency={balance.currency} /> : null}
           </div>
 
           <div className="rounded-2xl border border-white/10 bg-slate-900/70 p-6 sm:col-span-2 lg:col-span-3">
@@ -59,21 +67,17 @@ export default async function DashboardPage() {
               <span className="text-xs text-slate-500">Posted ledger entries</span>
             </div>
             <div className="mt-5 divide-y divide-white/10">
-              {transactions.length === 0 ? (
-                <p className="py-6 text-sm text-slate-500">No posted transactions yet.</p>
-              ) : (
-                transactions.map((transaction) => (
-                  <div key={transaction.id} className="flex items-center justify-between gap-4 py-4">
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-medium">{transaction.description}</p>
-                      <p className="mt-1 text-xs text-slate-500">{transaction.reference} · {new Date(transaction.postedAt).toLocaleDateString("en-NG")}</p>
-                    </div>
-                    <p className={`shrink-0 text-sm font-semibold ${transaction.direction === "CREDIT" ? "text-emerald-300" : "text-white"}`}>
-                      {transaction.direction === "CREDIT" ? "+" : "−"}{formatKobo(transaction.amountKobo, transaction.currency)}
-                    </p>
+              {transactions.length === 0 ? <p className="py-6 text-sm text-slate-500">No posted transactions yet.</p> : transactions.map((transaction) => (
+                <div key={transaction.id} className="flex items-center justify-between gap-4 py-4">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium">{transaction.description}</p>
+                    <p className="mt-1 text-xs text-slate-500">{transaction.reference} · {new Date(transaction.postedAt).toLocaleDateString("en-NG")}</p>
                   </div>
-                ))
-              )}
+                  <p className={`shrink-0 text-sm font-semibold ${transaction.direction === "CREDIT" ? "text-emerald-300" : "text-white"}`}>
+                    {transaction.direction === "CREDIT" ? "+" : "−"}{formatKobo(transaction.amountKobo, transaction.currency)}
+                  </p>
+                </div>
+              ))}
             </div>
           </div>
 
