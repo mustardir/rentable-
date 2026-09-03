@@ -6,9 +6,7 @@ import { CreateWalletRequestDto } from './dto/create-wallet-request.dto';
 import { WalletService } from './wallet.service';
 import { PrismaService } from '../prisma/prisma.service';
 
-interface AuthenticatedRequest extends Request {
-  user: { id: string; email: string; role: string };
-}
+interface AuthenticatedRequest extends Request { user: { id: string; email: string; role: string }; }
 
 @Controller('wallet')
 @UseGuards(JwtAuthGuard)
@@ -19,12 +17,7 @@ export class WalletController {
   async getRequests(@Req() req: AuthenticatedRequest, @Query('limit') rawLimit?: string) {
     const parsed = rawLimit ? Number.parseInt(rawLimit, 10) : 20;
     const limit = Number.isFinite(parsed) ? Math.min(100, Math.max(1, parsed)) : 20;
-    return this.prisma.transaction.findMany({
-      where: { userId: req.user.id, type: { in: [TransactionType.DEPOSIT, TransactionType.WITHDRAWAL] } },
-      orderBy: { createdAt: 'desc' },
-      take: limit,
-      select: { id: true, type: true, status: true, amountKobo: true, currency: true, reference: true, idempotencyKey: true, journalEntryId: true, completedAt: true, createdAt: true },
-    });
+    return this.prisma.transaction.findMany({ where: { userId: req.user.id, type: { in: [TransactionType.DEPOSIT, TransactionType.WITHDRAWAL] } }, orderBy: { createdAt: 'desc' }, take: limit, select: { id: true, type: true, status: true, amountKobo: true, currency: true, reference: true, idempotencyKey: true, journalEntryId: true, completedAt: true, createdAt: true } });
   }
 
   @Get('admin/requests')
@@ -36,17 +29,14 @@ export class WalletController {
   }
 
   @Post('deposits')
-  createDeposit(@Req() req: AuthenticatedRequest, @Body() dto: CreateWalletRequestDto) {
-    return this.walletService.createDepositRequest(req.user.id, dto);
-  }
+  createDeposit(@Req() req: AuthenticatedRequest, @Body() dto: CreateWalletRequestDto) { return this.walletService.createDepositRequest(req.user.id, dto); }
 
   @Post('withdrawals')
-  createWithdrawal(@Req() req: AuthenticatedRequest, @Body() dto: CreateWalletRequestDto) {
-    return this.walletService.createWithdrawalRequest(req.user.id, dto);
-  }
+  createWithdrawal(@Req() req: AuthenticatedRequest, @Body() dto: CreateWalletRequestDto) { return this.walletService.createWithdrawalRequest(req.user.id, dto); }
 
   @Post('transactions/:id/confirm')
-  confirm(@Req() req: AuthenticatedRequest, @Param('id') id: string) {
-    return this.walletService.confirmRequest(id, req.user.id);
-  }
+  confirm(@Req() req: AuthenticatedRequest, @Param('id') id: string) { return this.walletService.confirmRequest(id, req.user.id); }
+
+  @Post('transactions/:id/reject')
+  reject(@Req() req: AuthenticatedRequest, @Param('id') id: string, @Body('reason') reason?: string) { return this.walletService.rejectRequest(id, req.user.id, reason); }
 }
