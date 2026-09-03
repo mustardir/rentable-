@@ -22,6 +22,7 @@ RUN addgroup -S nodejs && adduser -S nextjs -G nodejs
 
 COPY --from=build --chown=nextjs:nodejs /app/apps/admin/.next/standalone ./
 COPY --from=build --chown=nextjs:nodejs /app/apps/admin/.next/static ./apps/admin/.next/static
+COPY --from=build --chown=nextjs:nodejs /app/apps/admin/public ./apps/admin/public
 
 USER nextjs
 EXPOSE 3001
