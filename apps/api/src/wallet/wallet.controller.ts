@@ -1,4 +1,4 @@
-import { Body, Controller, Param, Post, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import type { Request } from 'express';
 import { CreateWalletRequestDto } from './dto/create-wallet-request.dto';
@@ -12,6 +12,11 @@ interface AuthenticatedRequest extends Request {
 @UseGuards(JwtAuthGuard)
 export class WalletController {
   constructor(private readonly walletService: WalletService) {}
+
+  @Get('requests')
+  getRequests(@Req() req: AuthenticatedRequest, @Query('limit') limit?: string) {
+    return this.walletService.getMyRequests(req.user.id, limit);
+  }
 
   @Post('deposits')
   createDeposit(@Req() req: AuthenticatedRequest, @Body() dto: CreateWalletRequestDto) {
