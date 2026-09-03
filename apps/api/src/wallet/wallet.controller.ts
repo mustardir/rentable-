@@ -1,8 +1,10 @@
 import { Body, Controller, Get, Param, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { TransactionType } from '@prisma/client';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import type { Request } from 'express';
 import { CreateWalletRequestDto } from './dto/create-wallet-request.dto';
 import { WalletService } from './wallet.service';
+import { PrismaService } from '../prisma/prisma.service';
 
 interface AuthenticatedRequest extends Request {
   user: { id: string; email: string; role: string };
@@ -11,11 +13,18 @@ interface AuthenticatedRequest extends Request {
 @Controller('wallet')
 @UseGuards(JwtAuthGuard)
 export class WalletController {
-  constructor(private readonly walletService: WalletService) {}
+  constructor(private readonly walletService: WalletService, private readonly prisma: PrismaService) {}
 
   @Get('requests')
-  getRequests(@Req() req: AuthenticatedRequest, @Query('limit') limit?: string) {
-    return this.walletService.getMyRequests(req.user.id, limit);
+  async getRequests(@Req() req: AuthenticatedRequest, @Query('limit') rawLimit?: string) {
+    const parsed = rawLimit ? Number.parseInt(rawLimit, 10) : 20;
+    const limit = Number.isFinite(parsed) ? Math.min(100, Math.max(1, parsed)) : 20;
+    return this.prisma.transaction.findMany({
+      where: { userId: req.user.id, type: { in: [TransactionType.DEPOSIT, TransactionType.WITHDRAWAL] } },
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+      select: { id: true, type: true, status: true, amountKobo: true, currency: true, reference: true, idempotencyKey: true, journalEntryId: true, completedAt: true, createdAt: true },
+    });
   }
 
   @Post('deposits')
