@@ -8,6 +8,8 @@ import type { CreateWalletRequestDto } from './dto/create-wallet-request.dto';
 const INVESTOR_CASH_ACCOUNT_ID = 'acct_1100';
 const CUSTOMER_DEPOSITS_ACCOUNT_ID = 'acct_2100';
 
+type WalletTransactionClient = Parameters<Parameters<PrismaService['$transaction']>[0]>[0];
+
 @Injectable()
 export class WalletService {
   private readonly postingEngine = new PostingEngine();
@@ -52,7 +54,7 @@ export class WalletService {
     const result = await this.prisma.$transaction(async (tx) => {
       const transaction = await tx.transaction.findUnique({ where: { id: transactionId } });
       if (!transaction) throw new NotFoundException('Wallet transaction not found');
-      if (transaction.status === TransactionStatus.COMPLETED) return transaction;
+      if (transaction.status === TransactionStatus.COMPLETED) return { transaction, changed: false };
       if (transaction.status !== TransactionStatus.PENDING) throw new BadRequestException(`Transaction cannot be confirmed from status ${transaction.status}`);
       const claimed = await tx.transaction.updateMany({ where: { id: transaction.id, status: TransactionStatus.PENDING }, data: { status: TransactionStatus.PROCESSING } });
       if (claimed.count !== 1) throw new BadRequestException('Transaction is already being processed');
@@ -72,25 +74,32 @@ export class WalletService {
       });
       if (!entryResult.ok) throw new BadRequestException(entryResult.error.message);
       const journalEntry = await tx.journalEntry.create({ data: { id: entryResult.value.id, idempotencyKey: entryResult.value.idempotencyKey, reference: transaction.reference, description: `${transaction.type === TransactionType.DEPOSIT ? 'Deposit' : 'Withdrawal'} ${transaction.reference}`, currency: transaction.currency, status: EntryStatus.POSTED, postedAt: entryResult.value.postedAt, createdAt: entryResult.value.createdAt, createdByUserId: adminUserId, metadata: { transactionId: transaction.id, confirmedByUserId: adminUserId }, lines: { create: entryResult.value.lines.map((line) => ({ id: line.id, accountId: line.accountId, direction: line.direction, amountKobo: line.amountKobo, metadata: line.metadata, createdAt: line.createdAt })) } } });
-      return tx.transaction.update({ where: { id: transaction.id }, data: { status: TransactionStatus.COMPLETED, journalEntryId: journalEntry.id, completedAt: new Date(), metadata: { workflow: transaction.type === TransactionType.DEPOSIT ? 'customer_deposit' : 'customer_withdrawal', confirmedByUserId: adminUserId } } });
+      const updated = await tx.transaction.update({ where: { id: transaction.id }, data: { status: TransactionStatus.COMPLETED, journalEntryId: journalEntry.id, completedAt: new Date(), metadata: { workflow: transaction.type === TransactionType.DEPOSIT ? 'customer_deposit' : 'customer_withdrawal', confirmedByUserId: adminUserId } } });
+      return { transaction: updated, changed: true };
     });
-    await this.audit.append({ actorUserId: admin.id, actorRole: admin.role, eventType: 'WALLET_REQUEST_APPROVED', entityType: 'Transaction', entityId: result.id, payload: { transactionId: result.id, reference: result.reference, type: result.type, amountKobo: result.amountKobo.toString(), currency: result.currency } });
-    return result;
+    if (result.changed) {
+      await this.audit.append({ actorUserId: admin.id, actorRole: admin.role, eventType: 'WALLET_REQUEST_APPROVED', entityType: 'Transaction', entityId: result.transaction.id, payload: { transactionId: result.transaction.id, reference: result.transaction.reference, type: result.transaction.type, amountKobo: result.transaction.amountKobo.toString(), currency: result.transaction.currency } });
+    }
+    return result.transaction;
   }
 
   async rejectRequest(transactionId: string, adminUserId: string, reason?: string) {
     const admin = await this.requireOperator(adminUserId);
+    const normalizedReason = reason?.trim() || 'Rejected by operator';
     const result = await this.prisma.$transaction(async (tx) => {
       const transaction = await tx.transaction.findUnique({ where: { id: transactionId } });
       if (!transaction) throw new NotFoundException('Wallet transaction not found');
-      if (transaction.status === TransactionStatus.CANCELLED) return transaction;
+      if (transaction.status === TransactionStatus.CANCELLED) return { transaction, changed: false };
       if (transaction.status !== TransactionStatus.PENDING) throw new BadRequestException(`Transaction cannot be rejected from status ${transaction.status}`);
-      const updated = await tx.transaction.updateMany({ where: { id: transaction.id, status: TransactionStatus.PENDING }, data: { status: TransactionStatus.CANCELLED, metadata: { workflow: transaction.type === TransactionType.DEPOSIT ? 'customer_deposit' : 'customer_withdrawal', rejectedByUserId: adminUserId, rejectionReason: reason?.trim() || 'Rejected by operator' } } });
+      const updated = await tx.transaction.updateMany({ where: { id: transaction.id, status: TransactionStatus.PENDING }, data: { status: TransactionStatus.CANCELLED, metadata: { workflow: transaction.type === TransactionType.DEPOSIT ? 'customer_deposit' : 'customer_withdrawal', rejectedByUserId: adminUserId, rejectionReason: normalizedReason } } });
       if (updated.count !== 1) throw new BadRequestException('Transaction is already being processed');
-      return tx.transaction.findUniqueOrThrow({ where: { id: transaction.id } });
+      const cancelled = await tx.transaction.findUniqueOrThrow({ where: { id: transaction.id } });
+      return { transaction: cancelled, changed: true };
     });
-    await this.audit.append({ actorUserId: admin.id, actorRole: admin.role, eventType: 'WALLET_REQUEST_REJECTED', entityType: 'Transaction', entityId: result.id, payload: { transactionId: result.id, reference: result.reference, type: result.type, amountKobo: result.amountKobo.toString(), currency: result.currency, reason: reason?.trim() || 'Rejected by operator' } });
-    return result;
+    if (result.changed) {
+      await this.audit.append({ actorUserId: admin.id, actorRole: admin.role, eventType: 'WALLET_REQUEST_REJECTED', entityType: 'Transaction', entityId: result.transaction.id, payload: { transactionId: result.transaction.id, reference: result.transaction.reference, type: result.transaction.type, amountKobo: result.transaction.amountKobo.toString(), currency: result.transaction.currency, reason: normalizedReason } });
+    }
+    return result.transaction;
   }
 
   private async requireOperator(userId: string) {
@@ -99,7 +108,7 @@ export class WalletService {
     return user;
   }
 
-  private async assertSufficientBalance(tx: any, userId: string, amountKobo: bigint) {
+  private async assertSufficientBalance(tx: WalletTransactionClient, userId: string, amountKobo: bigint) {
     const lines = await tx.journalLine.findMany({ where: { accountId: CUSTOMER_DEPOSITS_ACCOUNT_ID, metadata: { path: ['investorId'], equals: userId }, journalEntry: { status: EntryStatus.POSTED } }, select: { direction: true, amountKobo: true } });
     let availableKobo = 0n;
     for (const line of lines) availableKobo += line.direction === 'CREDIT' ? line.amountKobo : -line.amountKobo;
