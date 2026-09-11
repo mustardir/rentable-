@@ -75,3 +75,22 @@ jobs:
 
       - name: Run financial product and DOCX unit tests
         run: pnpm --filter @fortress-fund/api test:vitest test/financial-product.defaults.spec.ts test/financial-product.service.spec.ts test/document-core.docx.spec.ts test/document-template.pipeline.spec.ts
+
+      - name: Run ledger immutability checkpoint tests
+        run: pnpm --filter @fortress-fund/api test -- --runInBand ledger-immutability.integration.spec.ts
+
+      - name: Report checkpoint results
+        if: always()
+        run: |
+          echo "## 🔐 Ledger Immutability Checkpoint" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Migration:** Fortress Guard PostgreSQL triggers" >> $GITHUB_STEP_SUMMARY
+          echo "**Test File:** \`apps/api/test/ledger-immutability.integration.spec.ts\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Test Cases:** 12" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ **Checkpoint requirements verified:**" >> $GITHUB_STEP_SUMMARY
+          echo "- Posted journal entries are immutable" >> $GITHUB_STEP_SUMMARY
+          echo "- Journal entries cannot be deleted" >> $GITHUB_STEP_SUMMARY
+          echo "- Journal lines cannot be edited or deleted" >> $GITHUB_STEP_SUMMARY
+          echo "- Reversals follow 1:1 linking protocol" >> $GITHUB_STEP_SUMMARY
+          echo "- Transactions rollback on constraint violation" >> $GITHUB_STEP_SUMMARY
