@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  postgres_test:
+    image: postgres:16-alpine
+    container_name: fortress_postgres_test
+    environment:
+      POSTGRES_USER: fortress
+      POSTGRES_PASSWORD: fortress_test_password
+      POSTGRES_DB: fortress_test
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_test_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fortress -d fortress_test"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - fortress_test
+
+volumes:
+  postgres_test_data:
+
+networks:
+  fortress_test:
+    driver: bridge
