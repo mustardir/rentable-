@@ -20,7 +20,7 @@ export class WalletService {
       where: { type: { in: [TransactionType.DEPOSIT, TransactionType.WITHDRAWAL] }, status: TransactionStatus.PENDING },
       orderBy: { createdAt: 'asc' },
       take: Math.min(100, Math.max(1, limit)),
-      select: { id: true, type: true, status: true, amountKobo: true, currency: true, reference: true, idempotencyKey: true, journalEntryId: true, completedAt: true, createdAt: true, user: { select: { id: true, email: true, firstName: true, lastName: true } } },
+      select: { id: true, type: true, status: true, amountKobo: true, currency: true, reference: true, idempotencyKey: true, journalEntryId: true, completedAt: true, createdAt: true, user: { select: { id: true, email: true, profile: { select: { firstName: true, lastName: true } } } } },
     });
   }
 
