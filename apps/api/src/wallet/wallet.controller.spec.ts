@@ -1,5 +1,5 @@
 import { ForbiddenException } from '@nestjs/common';
-import { TransactionType, UserRole } from '@prisma/client';
+import { UserRole } from '@prisma/client';
 import { WalletController } from './wallet.controller';
 
 describe('WalletController admin request authorization', () => {
