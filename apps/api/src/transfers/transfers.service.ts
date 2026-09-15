@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { PostingEngine } from '@fortress/ledger-core';
-import { EntryStatus, TransactionStatus, TransactionType, TransferStatus, Prisma } from '@prisma/client';
+import { EntryStatus, TransactionStatus, TransactionType, TransferStatus, Prisma, UserRole } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import type { CreateTransferDto } from './dto/create-transfer.dto';
 
@@ -37,6 +37,7 @@ export class TransfersService {
         this.assertIdempotentReplay(duplicate, dto.sourceUserId, dto.destinationUserId, amountKobo, currency, reference);
         return duplicate;
       }
+      await this.assertTransferParticipants(tx, dto.sourceUserId, dto.destinationUserId);
       await this.lockSourceBalance(tx, dto.sourceUserId, currency);
       await this.assertSufficientBalance(tx, dto.sourceUserId, currency, amountKobo);
       const transaction = await tx.transaction.create({ data: { userId: dto.sourceUserId, type: TransactionType.TRANSFER, status: TransactionStatus.PROCESSING, amountKobo, currency, reference, idempotencyKey: dto.idempotencyKey, metadata: { sourceUserId: dto.sourceUserId, destinationUserId: dto.destinationUserId } } });
@@ -44,6 +45,18 @@ export class TransfersService {
       await tx.transaction.update({ where: { id: transaction.id }, data: { status: TransactionStatus.COMPLETED, journalEntryId: journalEntry.id, completedAt: new Date() } });
       return tx.transfer.create({ data: { sourceUserId: dto.sourceUserId, destinationUserId: dto.destinationUserId, status: TransferStatus.COMPLETED, amountKobo, currency, reference, idempotencyKey: dto.idempotencyKey, journalEntryId: journalEntry.id, metadata: { transactionId: transaction.id }, completedAt: new Date() }, include: { journalEntry: { include: { lines: true } } } });
     });
+  }
+
+  private async assertTransferParticipants(tx: TransferTransactionClient, sourceUserId: string, destinationUserId: string) {
+    const participants = await tx.user.findMany({
+      where: { id: { in: [sourceUserId, destinationUserId] } },
+      select: { id: true, role: true },
+    });
+    const byId = new Map(participants.map((user) => [user.id, user]));
+    const source = byId.get(sourceUserId);
+    const destination = byId.get(destinationUserId);
+    if (!source || source.role !== UserRole.INVESTOR) throw new BadRequestException('INVALID_SOURCE_USER');
+    if (!destination || destination.role !== UserRole.INVESTOR) throw new BadRequestException('INVALID_DESTINATION_USER');
   }
 
   private assertIdempotentReplay(existing: { sourceUserId: string; destinationUserId: string; amountKobo: bigint; currency: string; reference: string }, sourceUserId: string, destinationUserId: string, amountKobo: bigint, currency: string, reference: string) {
