@@ -26,6 +26,9 @@ describe('LedgerService user balance authorization', () => {
     expect(balance.accountId).toBe('acct-a');
     expect(balance.currency).toBe('NGN');
     expect(balance.balanceKobo).toBe('0');
+    expect(prisma.journalEntry.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ status: 'POSTED', currency: 'NGN' }),
+    }));
   });
 
   it('does not include another user’s journal lines on a shared customer-deposit account', async () => {
@@ -43,6 +46,38 @@ describe('LedgerService user balance authorization', () => {
     const service = new LedgerService(prisma);
     const balance = await service.getMyBalance('user-a');
     expect(balance.balanceKobo).toBe('10000');
+  });
+
+  it('isolates the balance and history to the mapped currency', async () => {
+    prisma.userLedgerAccount.findFirst.mockResolvedValue({
+      accountId: 'acct-2100', currency: 'USD', isActive: true,
+    });
+    prisma.journalEntry.findMany.mockResolvedValue([
+      {
+        id: 'entry-usd', idempotencyKey: 'idem-usd', status: 'POSTED', currency: 'USD',
+        postedAt: new Date(), createdAt: new Date(), reversalOfId: null, reversedById: null,
+        lines: [{ accountId: 'acct-2100', direction: 'CREDIT', amountKobo: 70000n, metadata: { investorId: 'user-a' } }],
+      },
+    ]);
+    const service = new LedgerService(prisma);
+    const balance = await service.getMyBalance('user-a');
+    expect(balance.balanceKobo).toBe('70000');
+    expect(prisma.journalEntry.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ status: 'POSTED', currency: 'USD' }),
+    }));
+
+    prisma.journalEntry.findMany.mockResolvedValue([
+      {
+        id: 'entry-usd', reference: 'DEP-USD', description: 'USD deposit', currency: 'USD', status: 'POSTED', postedAt: new Date(),
+        metadata: {},
+        lines: [{ accountId: 'acct-2100', direction: 'CREDIT', amountKobo: 70000n, metadata: { investorId: 'user-a' } }],
+      },
+    ]);
+    const transactions = await service.getMyTransactions('user-a', 20);
+    expect(transactions).toHaveLength(1);
+    expect(prisma.journalEntry.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ status: 'POSTED', currency: 'USD' }),
+    }));
   });
 
   it('returns only posted entries for the authenticated investor', async () => {
@@ -70,7 +105,7 @@ describe('LedgerService user balance authorization', () => {
     expect(transactions[0]).toMatchObject({ id: 'entry-a', reference: 'DEP-1', direction: 'CREDIT', amountKobo: '125000' });
     expect(transactions[1]).toMatchObject({ id: 'entry-b', reference: 'TRF-2', direction: 'CREDIT', amountKobo: '50000' });
     expect(prisma.journalEntry.findMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: expect.objectContaining({ status: 'POSTED' }),
+      where: expect.objectContaining({ status: 'POSTED', currency: 'NGN' }),
       take: 20,
     }));
   });
