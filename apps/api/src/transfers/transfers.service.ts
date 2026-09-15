@@ -53,7 +53,7 @@ export class TransfersService {
   }
 
   private async lockSourceBalance(tx: TransferTransactionClient, userId: string, currency: string) {
-    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`transfer:${userId}:${currency}`}, 0))`;
+    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`transfer:${userId}:${currency}`}, 0))::text`;
   }
 
   private async assertSufficientBalance(tx: TransferTransactionClient, userId: string, currency: string, amountKobo: bigint) {
