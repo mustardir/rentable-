@@ -1,6 +1,6 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { PostingEngine } from '@fortress/ledger-core';
-import { EntryStatus, Prisma, TransactionStatus, TransactionType } from '@prisma/client';
+import { EntryStatus, Prisma, TransactionStatus, TransactionType, UserRole } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { PrismaAuditRepository } from '../audit/prisma-audit.repository';
 import type { CreateWalletRequestDto } from './dto/create-wallet-request.dto';
@@ -92,7 +92,11 @@ export class WalletService {
     for (const line of lines) availableKobo += line.direction === 'CREDIT' ? line.amountKobo : -line.amountKobo;
     if (availableKobo < amountKobo) throw new BadRequestException('Insufficient available balance');
   }
-  private async assertActiveUser(userId: string) { const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { id: true, isActive: true } }); if (!user || !user.isActive) throw new NotFoundException('Investor not found'); }
+  private async assertActiveUser(userId: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { id: true, isActive: true, role: true } });
+    if (!user || !user.isActive) throw new NotFoundException('Investor not found');
+    if (user.role !== UserRole.INVESTOR) throw new ForbiddenException('Only investors can create wallet requests');
+  }
   private normalizeCurrency(currency?: string): string {
     const normalized = currency?.trim().toUpperCase();
     if (normalized === undefined || !/^[A-Z]{3}$/.test(normalized)) throw new BadRequestException('INVALID_CURRENCY');
