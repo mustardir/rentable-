@@ -15,14 +15,14 @@ export class TransfersService {
 
   async createTransfer(dto: CreateTransferDto) {
     const currency = this.normalizeCurrency(dto.currency);
+    const amountKobo = this.parseAmountKobo(dto.amountKobo);
+    const reference = dto.reference ?? `TRF-${dto.idempotencyKey}`;
     const existing = await this.prisma.transfer.findUnique({ where: { idempotencyKey: dto.idempotencyKey }, include: { journalEntry: { include: { lines: true } } } });
     if (existing) {
-      if (existing.currency !== currency) throw new BadRequestException('idempotencyKey is already in use for a different currency');
+      this.assertIdempotentReplay(existing, dto.sourceUserId, dto.destinationUserId, amountKobo, currency, reference);
       return existing;
     }
     if (dto.sourceUserId === dto.destinationUserId) throw new BadRequestException('sourceUserId and destinationUserId must differ');
-    const amountKobo = this.parseAmountKobo(dto.amountKobo);
-    const reference = dto.reference ?? `TRF-${dto.idempotencyKey}`;
     const entryResult = this.postingEngine.buildEntry({
       idempotencyKey: dto.idempotencyKey,
       lines: [
@@ -34,7 +34,7 @@ export class TransfersService {
     return this.prisma.$transaction(async (tx) => {
       const duplicate = await tx.transfer.findUnique({ where: { idempotencyKey: dto.idempotencyKey }, include: { journalEntry: { include: { lines: true } } } });
       if (duplicate) {
-        if (duplicate.currency !== currency) throw new BadRequestException('idempotencyKey is already in use for a different currency');
+        this.assertIdempotentReplay(duplicate, dto.sourceUserId, dto.destinationUserId, amountKobo, currency, reference);
         return duplicate;
       }
       await this.lockSourceBalance(tx, dto.sourceUserId, currency);
@@ -44,6 +44,12 @@ export class TransfersService {
       await tx.transaction.update({ where: { id: transaction.id }, data: { status: TransactionStatus.COMPLETED, journalEntryId: journalEntry.id, completedAt: new Date() } });
       return tx.transfer.create({ data: { sourceUserId: dto.sourceUserId, destinationUserId: dto.destinationUserId, status: TransferStatus.COMPLETED, amountKobo, currency, reference, idempotencyKey: dto.idempotencyKey, journalEntryId: journalEntry.id, metadata: { transactionId: transaction.id }, completedAt: new Date() }, include: { journalEntry: { include: { lines: true } } } });
     });
+  }
+
+  private assertIdempotentReplay(existing: { sourceUserId: string; destinationUserId: string; amountKobo: bigint; currency: string; reference: string }, sourceUserId: string, destinationUserId: string, amountKobo: bigint, currency: string, reference: string) {
+    if (existing.sourceUserId !== sourceUserId || existing.destinationUserId !== destinationUserId || existing.amountKobo !== amountKobo || existing.currency !== currency || existing.reference !== reference) {
+      throw new BadRequestException('IDEMPOTENCY_CONFLICT');
+    }
   }
 
   private async lockSourceBalance(tx: TransferTransactionClient, userId: string, currency: string) {
