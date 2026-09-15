@@ -8,12 +8,6 @@ const describePrisma = DATABASE_URL ? describe : describe.skip;
 const INVESTOR_CASH_ACCOUNT_ID = 'acct_1100';
 const CUSTOMER_DEPOSITS_ACCOUNT_ID = 'acct_2100';
 
-/**
- * Verifies that the PostgreSQL transaction-scoped advisory lock protects the
- * balance check when two independent transfers spend the same balance at once.
- * Financial rows are intentionally not deleted because posted ledger records
- * are append-only and immutable.
- */
 describePrisma('Fortress Transfer Concurrency (PostgreSQL)', () => {
   const prefix = `transfer-concurrency-${Date.now()}-${process.pid}`;
   const sourceUserId = `${prefix}-source`;
@@ -89,6 +83,20 @@ describePrisma('Fortress Transfer Concurrency (PostgreSQL)', () => {
   it('allows only one of two concurrent transfers to spend the exact same USD balance', async () => {
     const service = new TransfersService(prisma as any);
 
+    const initialLines = await prisma.journalLine.findMany({
+      where: {
+        accountId: CUSTOMER_DEPOSITS_ACCOUNT_ID,
+        metadata: { path: ['investorId'], equals: sourceUserId },
+        journalEntry: { status: EntryStatus.POSTED, currency: 'USD' },
+      },
+      select: { direction: true, amountKobo: true },
+    });
+    const initialBalance = initialLines.reduce(
+      (balance, line) => balance + (line.direction === Direction.CREDIT ? line.amountKobo : -line.amountKobo),
+      0n,
+    );
+    expect(initialBalance).toBe(10000n);
+
     const transferA = service.createTransfer({
       sourceUserId,
       destinationUserId: destinationA,
@@ -111,8 +119,15 @@ describePrisma('Fortress Transfer Concurrency (PostgreSQL)', () => {
     const fulfilled = results.filter((result) => result.status === 'fulfilled');
     const rejected = results.filter((result) => result.status === 'rejected');
 
-    expect(fulfilled).toHaveLength(1);
-    expect(rejected).toHaveLength(1);
+    if (fulfilled.length !== 1 || rejected.length !== 1) {
+      const reasons = results.map((result) =>
+        result.status === 'rejected'
+          ? { status: result.status, message: result.reason instanceof Error ? result.reason.message : String(result.reason) }
+          : { status: result.status },
+      );
+      throw new Error(`Unexpected concurrent transfer outcomes: ${JSON.stringify(reasons)}`);
+    }
+
     expect((rejected[0] as PromiseRejectedResult).reason.message).toContain('Insufficient available balance');
 
     const transfers = await prisma.transfer.findMany({
