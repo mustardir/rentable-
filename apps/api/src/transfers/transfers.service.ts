@@ -14,11 +14,15 @@ export class TransfersService {
   constructor(private readonly prisma: PrismaService) {}
 
   async createTransfer(dto: CreateTransferDto) {
+    const currency = this.normalizeCurrency(dto.currency);
     const existing = await this.prisma.transfer.findUnique({
       where: { idempotencyKey: dto.idempotencyKey },
       include: { journalEntry: { include: { lines: true } } },
     });
-    if (existing) return existing;
+    if (existing) {
+      if (existing.currency !== currency) throw new BadRequestException('idempotencyKey is already in use for a different currency');
+      return existing;
+    }
 
     if (dto.sourceUserId === dto.destinationUserId) {
       throw new BadRequestException('sourceUserId and destinationUserId must differ');
@@ -26,7 +30,6 @@ export class TransfersService {
 
     const amountKobo = this.parseAmountKobo(dto.amountKobo);
     const reference = dto.reference ?? `TRF-${dto.idempotencyKey}`;
-    const currency = dto.currency ?? 'NGN';
 
     const entryResult = this.postingEngine.buildEntry({
       idempotencyKey: dto.idempotencyKey,
@@ -53,7 +56,10 @@ export class TransfersService {
         where: { idempotencyKey: dto.idempotencyKey },
         include: { journalEntry: { include: { lines: true } } },
       });
-      if (duplicate) return duplicate;
+      if (duplicate) {
+        if (duplicate.currency !== currency) throw new BadRequestException('idempotencyKey is already in use for a different currency');
+        return duplicate;
+      }
 
       // Transaction-scoped advisory lock serializes balance-check-and-post operations
       // for the same investor and currency across all API instances/connections.
@@ -146,6 +152,12 @@ export class TransfersService {
     }
 
     if (availableKobo < amountKobo) throw new BadRequestException('Insufficient available balance');
+  }
+
+  private normalizeCurrency(currency?: string): string {
+    const normalized = currency?.trim().toUpperCase();
+    if (!/^[A-Z]{3}$/.test(normalized ?? '')) throw new BadRequestException('INVALID_CURRENCY');
+    return normalized;
   }
 
   private parseAmountKobo(value: string): bigint {
