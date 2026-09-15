@@ -28,7 +28,23 @@ export class WalletService {
       this.assertIdempotentReplay(existing, userId, type, amountKobo, currency, reference);
       return existing;
     }
-    return this.prisma.transaction.create({ data: { userId, type, status: TransactionStatus.PENDING, amountKobo, currency, reference, idempotencyKey: dto.idempotencyKey, metadata: { workflow: type === TransactionType.DEPOSIT ? 'customer_deposit' : 'customer_withdrawal' } } });
+
+    try {
+      return await this.prisma.transaction.create({ data: { userId, type, status: TransactionStatus.PENDING, amountKobo, currency, reference, idempotencyKey: dto.idempotencyKey, metadata: { workflow: type === TransactionType.DEPOSIT ? 'customer_deposit' : 'customer_withdrawal' } } });
+    } catch (error) {
+      if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== 'P2002') throw error;
+      const target = Array.isArray(error.meta?.target)
+        ? error.meta.target.map(String)
+        : typeof error.meta?.target === 'string'
+          ? [error.meta.target]
+          : [];
+      if (!target.includes('idempotencyKey')) throw error;
+
+      const concurrent = await this.prisma.transaction.findUnique({ where: { idempotencyKey: dto.idempotencyKey } });
+      if (!concurrent) throw error;
+      this.assertIdempotentReplay(concurrent, userId, type, amountKobo, currency, reference);
+      return concurrent;
+    }
   }
 
   private assertIdempotentReplay(existing: { userId: string; type: TransactionType; amountKobo: bigint; currency: string; reference: string }, userId: string, type: TransactionType, amountKobo: bigint, currency: string, reference: string) {
