@@ -5,6 +5,7 @@ describe('WalletService', () => {
   const audit = { append: jest.fn().mockResolvedValue(undefined) };
   const txUpdateMany = jest.fn().mockResolvedValue({ count: 1 });
   const txUpdate = jest.fn().mockResolvedValue({ id: 'tx-1', status: 'COMPLETED' });
+  const txQueryRaw = jest.fn().mockResolvedValue([]);
   const prisma = {
     user: { findUnique: jest.fn() },
     transaction: {
@@ -21,6 +22,7 @@ describe('WalletService', () => {
     audit.append.mockResolvedValue(undefined);
     txUpdateMany.mockResolvedValue({ count: 1 });
     txUpdate.mockResolvedValue({ id: 'tx-1', status: 'COMPLETED' });
+    txQueryRaw.mockResolvedValue([]);
     transaction.mockImplementation(async (callback: any) => callback({
       transaction: {
         findUnique: prisma.transaction.findUnique,
@@ -30,6 +32,7 @@ describe('WalletService', () => {
       },
       journalLine: { findMany: prisma.journalLine.findMany },
       journalEntry: { create: prisma.journalEntry.create },
+      $queryRaw: txQueryRaw,
     }));
   });
 
@@ -65,6 +68,7 @@ describe('WalletService', () => {
     const result = await service().confirmRequest('tx-1', 'admin-1');
 
     expect(result.status).toBe('COMPLETED');
+    expect(txQueryRaw).toHaveBeenCalledTimes(1);
     expect(prisma.journalEntry.create).toHaveBeenCalledTimes(1);
     expect(prisma.journalEntry.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({
@@ -80,6 +84,41 @@ describe('WalletService', () => {
     }));
     expect(audit.append).toHaveBeenCalledTimes(1);
     expect(audit.append).toHaveBeenCalledWith(expect.objectContaining({ eventType: 'WALLET_REQUEST_APPROVED', entityId: 'tx-1' }));
+  });
+
+  it('locks before checking a withdrawal balance and posts with the same transaction lock', async () => {
+    prisma.user.findUnique.mockResolvedValue({ id: 'admin-1', isActive: true, role: 'ADMIN' });
+    prisma.transaction.findUnique.mockResolvedValue({
+      id: 'tx-2', userId: 'user-a', type: 'WITHDRAWAL', status: 'PENDING', amountKobo: 50000n,
+      currency: 'USD', reference: 'WDR-USD-1', idempotencyKey: 'wdr-usd-1',
+    });
+    prisma.journalLine.findMany.mockResolvedValue([{ direction: 'CREDIT', amountKobo: 100000n }]);
+    prisma.journalEntry.create.mockResolvedValue({ id: 'je-2' });
+    txUpdate.mockResolvedValue({ id: 'tx-2', status: 'COMPLETED', amountKobo: 50000n, currency: 'USD', reference: 'WDR-USD-1', type: 'WITHDRAWAL' });
+
+    const result = await service().confirmRequest('tx-2', 'admin-1');
+
+    expect(result.status).toBe('COMPLETED');
+    const lockOrder = txQueryRaw.mock.invocationCallOrder[0]!;
+    const balanceOrder = prisma.journalLine.findMany.mock.invocationCallOrder[0]!;
+    const postOrder = prisma.journalEntry.create.mock.invocationCallOrder[0]!;
+    expect(lockOrder).toBeLessThan(balanceOrder);
+    expect(balanceOrder).toBeLessThan(postOrder);
+  });
+
+  it('filters withdrawal balance by the transaction currency', async () => {
+    prisma.user.findUnique.mockResolvedValue({ id: 'admin-1', isActive: true, role: 'ADMIN' });
+    prisma.transaction.findUnique.mockResolvedValue({
+      id: 'tx-3', userId: 'user-a', type: 'WITHDRAWAL', status: 'PENDING', amountKobo: 100001n,
+      currency: 'USD', reference: 'WDR-USD-2', idempotencyKey: 'wdr-usd-2',
+    });
+    prisma.journalLine.findMany.mockResolvedValue([{ direction: 'CREDIT', amountKobo: 100000n }]);
+
+    await expect(service().confirmRequest('tx-3', 'admin-1')).rejects.toThrow('Insufficient available balance');
+    expect(prisma.journalLine.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ journalEntry: { status: 'POSTED', currency: 'USD' } }),
+    }));
+    expect(prisma.journalEntry.create).not.toHaveBeenCalled();
   });
 
   it('does not duplicate posting or approval audit when an already-completed request is confirmed again', async () => {
