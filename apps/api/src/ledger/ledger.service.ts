@@ -36,7 +36,7 @@ export class LedgerService {
     return {
       accountId: mapping.accountId,
       currency: mapping.currency,
-      balanceKobo: (await this.balanceRepository.getInvestorBalance(mapping.accountId, userId)).toString(),
+      balanceKobo: (await this.balanceRepository.getInvestorBalance(mapping.accountId, userId, mapping.currency)).toString(),
     };
   }
 
@@ -51,6 +51,7 @@ export class LedgerService {
     const entries = await this.prisma.journalEntry.findMany({
       where: {
         status: EntryStatus.POSTED,
+        currency: mapping.currency,
         lines: {
           some: {
             accountId: mapping.accountId,
