@@ -147,6 +147,7 @@ model RefreshToken {
   expiresAt      DateTime
   revokedAt      DateTime?
   replacedById   String?
+  replacedById   String?
   createdAt      DateTime    @default(now())
 
   user           User        @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -251,7 +252,7 @@ model JournalLine {
   id             String     @id @default(cuid())
   journalEntryId String
   accountId      String
-  currency       String
+  currency       String     @default("NGN")
   direction      Direction
   amountKobo     BigInt
   description    String?
