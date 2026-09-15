@@ -38,11 +38,12 @@ export class WalletService {
 
   private async createRequest(userId: string, dto: CreateWalletRequestDto, type: TransactionType) {
     const amountKobo = this.parseAmountKobo(dto.amountKobo);
-    const currency = dto.currency ?? 'NGN';
+    const currency = this.normalizeCurrency(dto.currency);
     const reference = dto.reference ?? `${type === TransactionType.DEPOSIT ? 'DEP' : 'WDR'}-${dto.idempotencyKey}`;
     const existing = await this.prisma.transaction.findUnique({ where: { idempotencyKey: dto.idempotencyKey } });
     if (existing) {
       if (existing.userId !== userId || existing.type !== type) throw new BadRequestException('idempotencyKey is already in use');
+      if (existing.currency !== currency) throw new BadRequestException('idempotencyKey is already in use for a different currency');
       return existing;
     }
     return this.prisma.transaction.create({ data: { userId, type, status: TransactionStatus.PENDING, amountKobo, currency, reference, idempotencyKey: dto.idempotencyKey, metadata: { workflow: type === TransactionType.DEPOSIT ? 'customer_deposit' : 'customer_withdrawal' } } });
@@ -122,6 +123,12 @@ export class WalletService {
   private async assertActiveUser(userId: string) {
     const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { id: true, isActive: true } });
     if (!user || !user.isActive) throw new NotFoundException('Investor not found');
+  }
+
+  private normalizeCurrency(currency?: string): string {
+    const normalized = currency?.trim().toUpperCase();
+    if (!/^[A-Z]{3}$/.test(normalized ?? '')) throw new BadRequestException('INVALID_CURRENCY');
+    return normalized;
   }
 
   private parseAmountKobo(value: string): bigint {
