@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Param, Post, Query, Req, UseGuards } from '@nestjs/common';
-import { TransactionType } from '@prisma/client';
+import { TransactionType, UserRole } from '@prisma/client';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import type { Request } from 'express';
 import { CreateWalletRequestDto } from './dto/create-wallet-request.dto';
@@ -22,7 +22,8 @@ export class WalletController {
 
   @Get('admin/requests')
   async getAdminRequests(@Req() req: AuthenticatedRequest, @Query('limit') rawLimit?: string) {
-    if (!['ADMIN', 'COMPLIANCE'].includes(req.user.role)) return this.walletService.forbiddenOperator();
+    const role = req.user.role as UserRole;
+    if (role !== UserRole.SUPER_ADMIN && role !== UserRole.COMPLIANCE_OFFICER) return this.walletService.forbiddenOperator();
     const parsed = rawLimit ? Number.parseInt(rawLimit, 10) : 50;
     const limit = Number.isFinite(parsed) ? Math.min(100, Math.max(1, parsed)) : 50;
     return this.walletService.getOperatorRequests(limit);
