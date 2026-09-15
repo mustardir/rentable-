@@ -25,11 +25,16 @@ export class WalletService {
     const reference = dto.reference ?? `${type === TransactionType.DEPOSIT ? 'DEP' : 'WDR'}-${dto.idempotencyKey}`;
     const existing = await this.prisma.transaction.findUnique({ where: { idempotencyKey: dto.idempotencyKey } });
     if (existing) {
-      if (existing.userId !== userId || existing.type !== type) throw new BadRequestException('idempotencyKey is already in use');
-      if (existing.currency !== currency) throw new BadRequestException('idempotencyKey is already in use for a different currency');
+      this.assertIdempotentReplay(existing, userId, type, amountKobo, currency, reference);
       return existing;
     }
     return this.prisma.transaction.create({ data: { userId, type, status: TransactionStatus.PENDING, amountKobo, currency, reference, idempotencyKey: dto.idempotencyKey, metadata: { workflow: type === TransactionType.DEPOSIT ? 'customer_deposit' : 'customer_withdrawal' } } });
+  }
+
+  private assertIdempotentReplay(existing: { userId: string; type: TransactionType; amountKobo: bigint; currency: string; reference: string }, userId: string, type: TransactionType, amountKobo: bigint, currency: string, reference: string) {
+    if (existing.userId !== userId || existing.type !== type || existing.amountKobo !== amountKobo || existing.currency !== currency || existing.reference !== reference) {
+      throw new BadRequestException('IDEMPOTENCY_CONFLICT');
+    }
   }
 
   async confirmRequest(transactionId: string, adminUserId: string) {
