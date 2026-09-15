@@ -41,8 +41,7 @@ describePrisma('PrismaLedgerRepository concurrent idempotency', () => {
   });
 
   afterAll(async () => {
-    await prisma.journalLine.deleteMany({ where: { accountId: { in: accountIds } } });
-    await prisma.account.deleteMany({ where: { id: { in: accountIds } } });
+    // Journal records are immutable and intentionally remain in this ephemeral test database.
     await prisma.$disconnect();
   });
 
