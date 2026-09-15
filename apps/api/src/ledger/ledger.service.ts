@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { EntryStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { PrismaBalanceRepository } from './prisma-balance.repository';
@@ -23,9 +23,10 @@ export class LedgerService {
     this.balanceRepository = new PrismaBalanceRepository(prisma);
   }
 
-  async getMyBalance(userId: string): Promise<{ accountId: string; currency: string; balanceKobo: string }> {
+  async getMyBalance(userId: string, currency: string): Promise<{ accountId: string; currency: string; balanceKobo: string }> {
+    const normalizedCurrency = this.normalizeCurrency(currency);
     const mapping = await this.prisma.userLedgerAccount.findFirst({
-      where: { userId, isActive: true },
+      where: { userId, currency: normalizedCurrency, isActive: true },
       orderBy: { createdAt: 'asc' },
     });
     if (!mapping) throw new NotFoundException('LEDGER_ACCOUNT_NOT_FOUND');
@@ -36,13 +37,14 @@ export class LedgerService {
     return {
       accountId: mapping.accountId,
       currency: mapping.currency,
-      balanceKobo: (await this.balanceRepository.getInvestorBalance(mapping.accountId, userId, mapping.currency)).toString(),
+      balanceKobo: (await this.balanceRepository.getInvestorBalance(mapping.accountId, userId, normalizedCurrency)).toString(),
     };
   }
 
-  async getMyTransactions(userId: string, limit = 20): Promise<LedgerTransaction[]> {
+  async getMyTransactions(userId: string, currency: string, limit = 20): Promise<LedgerTransaction[]> {
+    const normalizedCurrency = this.normalizeCurrency(currency);
     const mapping = await this.prisma.userLedgerAccount.findFirst({
-      where: { userId, isActive: true },
+      where: { userId, currency: normalizedCurrency, isActive: true },
       orderBy: { createdAt: 'asc' },
     });
     if (!mapping) throw new NotFoundException('LEDGER_ACCOUNT_NOT_FOUND');
@@ -51,7 +53,7 @@ export class LedgerService {
     const entries = await this.prisma.journalEntry.findMany({
       where: {
         status: EntryStatus.POSTED,
-        currency: mapping.currency,
+        currency: normalizedCurrency,
         lines: {
           some: {
             accountId: mapping.accountId,
@@ -84,6 +86,14 @@ export class LedgerService {
         metadata: this.stringMetadata(entry.metadata),
       }];
     });
+  }
+
+  private normalizeCurrency(currency: string): string {
+    const normalized = currency?.trim().toUpperCase();
+    if (!/^[A-Z]{3}$/.test(normalized)) {
+      throw new BadRequestException('INVALID_CURRENCY');
+    }
+    return normalized;
   }
 
   private metadataValue(metadata: Prisma.JsonValue | null, key: string): string | undefined {
