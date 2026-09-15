@@ -33,11 +33,20 @@ export class WalletService {
     } catch (error) {
       if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== 'P2002') throw error;
       const target = Array.isArray(error.meta?.target) ? error.meta.target.map(String) : typeof error.meta?.target === 'string' ? [error.meta.target] : [];
-      if (!target.includes('idempotencyKey')) throw error;
+      if (!target.includes('idempotencyKey') && !target.includes('reference')) throw error;
       const concurrent = await this.prisma.transaction.findUnique({ where: { idempotencyKey: dto.idempotencyKey } });
-      if (!concurrent) throw error;
-      this.assertIdempotentReplay(concurrent, userId, type, amountKobo, currency, reference);
-      return concurrent;
+      if (concurrent) {
+        this.assertIdempotentReplay(concurrent, userId, type, amountKobo, currency, reference);
+        return concurrent;
+      }
+      if (target.includes('reference')) {
+        const conflictingReference = await this.prisma.transaction.findUnique({ where: { reference } });
+        if (conflictingReference) {
+          this.assertIdempotentReplay(conflictingReference, userId, type, amountKobo, currency, reference);
+          return conflictingReference;
+        }
+      }
+      throw error;
     }
   }
 
