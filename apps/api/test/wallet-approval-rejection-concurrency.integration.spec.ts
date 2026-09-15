@@ -82,7 +82,10 @@ describePrisma('Fortress Wallet Approval/Rejection Concurrency (PostgreSQL)', ()
   });
 
   it('allows exactly one concurrent operator approval to post the wallet request', async () => {
-    const service = new WalletService(prisma as any, { append: jest.fn().mockResolvedValue(undefined) } as any);
+    const service = new WalletService(prisma as any, {
+      append: jest.fn().mockResolvedValue(undefined),
+      appendInTransaction: jest.fn().mockResolvedValue(undefined),
+    } as any);
 
     const results = await Promise.allSettled([
       service.confirmRequest(approvalTransactionId, superAdminId),
@@ -117,7 +120,10 @@ describePrisma('Fortress Wallet Approval/Rejection Concurrency (PostgreSQL)', ()
   });
 
   it('allows exactly one concurrent operator rejection to cancel the wallet request', async () => {
-    const service = new WalletService(prisma as any, { append: jest.fn().mockResolvedValue(undefined) } as any);
+    const service = new WalletService(prisma as any, {
+      append: jest.fn().mockResolvedValue(undefined),
+      appendInTransaction: jest.fn().mockResolvedValue(undefined),
+    } as any);
 
     const results = await Promise.allSettled([
       service.rejectRequest(rejectionTransactionId, superAdminId, 'Rejected by super admin'),
