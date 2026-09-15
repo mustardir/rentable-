@@ -84,7 +84,7 @@ export class WalletService {
 
   private async requireOperator(userId: string) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
-    if (!user || !user.isActive || ![UserRole.SUPER_ADMIN, UserRole.COMPLIANCE_OFFICER].includes(user.role as UserRole)) throw new ForbiddenException('Only an active admin or compliance user can perform wallet approvals');
+    if (!user || !user.isActive || (user.role !== UserRole.SUPER_ADMIN && user.role !== UserRole.COMPLIANCE_OFFICER)) throw new ForbiddenException('Only an active admin or compliance user can perform wallet approvals');
     return user;
   }
   private async lockBalance(tx: WalletTransactionClient, userId: string, currency: string) { await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`transfer:${userId}:${currency}`}, 0))::text`; }
