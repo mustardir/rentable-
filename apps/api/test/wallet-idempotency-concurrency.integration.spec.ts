@@ -12,49 +12,36 @@ describe('WalletService idempotency concurrency', () => {
     prisma = new PrismaService();
     await prisma.$connect();
     service = new WalletService(prisma, { append: jest.fn() } as any);
-
     const investor = await prisma.user.findFirst({ where: { role: UserRole.INVESTOR, isActive: true }, select: { id: true } });
     if (!investor) throw new Error('No active investor fixture available');
     investorId = investor.id;
   });
 
-  afterAll(async () => {
-    await prisma.$disconnect();
-  });
+  afterAll(async () => { await prisma.$disconnect(); });
 
   it('returns the same transaction for simultaneous identical requests', async () => {
     const idempotencyKey = `wallet-idem-concurrency-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const dto = { amountKobo: '10000', currency: 'USD', idempotencyKey, reference: `IDEM-${idempotencyKey}` };
-
     const originalFindUnique = prisma.transaction.findUnique.bind(prisma.transaction);
     let firstReadCount = 0;
     let release!: () => void;
     const bothRead = new Promise<void>((resolve) => { release = resolve; });
-    const barrier = new Promise<void>((resolve) => {
-      let count = 0;
-      const tick = () => {
-        count += 1;
-        if (count === 2) resolve();
-      };
-      (barrier as any).tick = tick;
-    });
+    let readCount = 0;
+    let releaseBothReads!: () => void;
+    const bothReads = new Promise<void>((resolve) => { releaseBothReads = resolve; });
 
     const findUniqueSpy = jest.spyOn(prisma.transaction, 'findUnique').mockImplementation(async (args: any) => {
       const result = await originalFindUnique(args);
       if (args?.where?.idempotencyKey === idempotencyKey && firstReadCount < 2) {
         firstReadCount += 1;
-        (barrier as any).tick();
-        await bothRead;
+        readCount += 1;
+        if (readCount === 2) releaseBothReads();
+        await bothReads;
       }
       return result;
     });
 
-    const waitForBothReads = async () => {
-      await barrier;
-      release();
-    };
-
-    const releaseTask = waitForBothReads();
+    const releaseTask = bothReads.then(() => release());
     const results = await Promise.all([
       service.createDepositRequest(investorId, dto),
       service.createDepositRequest(investorId, dto),
@@ -72,10 +59,8 @@ describe('WalletService idempotency concurrency', () => {
     const idempotencyKey = `wallet-idem-conflict-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const first = { amountKobo: '10000', currency: 'USD', idempotencyKey, reference: `CONFLICT-${idempotencyKey}` };
     const second = { ...first, amountKobo: '20000' };
-
     const created = await service.createDepositRequest(investorId, first);
     await expect(service.createDepositRequest(investorId, second)).rejects.toThrow(BadRequestException);
-
     const transactions = await prisma.transaction.findMany({ where: { idempotencyKey }, select: { id: true, amountKobo: true } });
     expect(transactions).toHaveLength(1);
     expect(transactions[0]).toEqual({ id: created.id, amountKobo: 10000n });
