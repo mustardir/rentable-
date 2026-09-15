@@ -9,34 +9,44 @@ describe('LedgerService user balance authorization', () => {
 
   beforeEach(() => jest.clearAllMocks());
 
-  it('rejects a user with no active ledger account mapping', async () => {
+  it('rejects a user with no active ledger account mapping for the requested currency', async () => {
     prisma.userLedgerAccount.findFirst.mockResolvedValue(null);
     const service = new LedgerService(prisma);
-    await expect(service.getMyBalance('user-a')).rejects.toThrow('LEDGER_ACCOUNT_NOT_FOUND');
+    await expect(service.getMyBalance('user-a', 'USD')).rejects.toThrow('LEDGER_ACCOUNT_NOT_FOUND');
+    expect(prisma.userLedgerAccount.findFirst).toHaveBeenCalledWith({
+      where: { userId: 'user-a', currency: 'USD', isActive: true },
+      orderBy: { createdAt: 'asc' },
+    });
   });
 
-  it('resolves the balance only through the authenticated user mapping', async () => {
+  it('resolves the balance only through the authenticated user mapping and requested currency', async () => {
     prisma.userLedgerAccount.findFirst.mockResolvedValue({
-      accountId: 'acct-a', currency: 'NGN', isActive: true,
+      accountId: 'acct-a', currency: 'USD', isActive: true,
     });
     prisma.account.findUnique.mockResolvedValue({ id: 'acct-a' });
     prisma.journalEntry.findMany.mockResolvedValue([]);
     const service = new LedgerService(prisma);
-    const balance = await service.getMyBalance('user-a');
+    const balance = await service.getMyBalance('user-a', 'usd');
     expect(balance.accountId).toBe('acct-a');
-    expect(balance.currency).toBe('NGN');
+    expect(balance.currency).toBe('USD');
     expect(balance.balanceKobo).toBe('0');
-    expect(prisma.journalEntry.findMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: expect.objectContaining({ status: 'POSTED', currency: 'NGN' }),
+    expect(prisma.userLedgerAccount.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+      where: { userId: 'user-a', currency: 'USD', isActive: true },
     }));
+  });
+
+  it('rejects an invalid currency code', async () => {
+    const service = new LedgerService(prisma);
+    await expect(service.getMyBalance('user-a', 'US')).rejects.toThrow('INVALID_CURRENCY');
+    expect(prisma.userLedgerAccount.findFirst).not.toHaveBeenCalled();
   });
 
   it('does not include another user’s journal lines on a shared customer-deposit account', async () => {
     prisma.userLedgerAccount.findFirst.mockResolvedValue({
-      accountId: 'acct-2100', currency: 'NGN', isActive: true,
+      accountId: 'acct-2100', currency: 'USD', isActive: true,
     });
     prisma.journalEntry.findMany.mockResolvedValue([{
-      id: 'entry-a', idempotencyKey: 'idem-a', status: 'POSTED',
+      id: 'entry-a', idempotencyKey: 'idem-a', status: 'POSTED', currency: 'USD',
       postedAt: new Date(), createdAt: new Date(), reversalOfId: null, reversedById: null,
       lines: [
         { id: 'line-a', journalEntryId: 'entry-a', accountId: 'acct-2100', direction: 'CREDIT', amountKobo: 10000n, metadata: { investorId: 'user-a' }, createdAt: new Date() },
@@ -44,11 +54,11 @@ describe('LedgerService user balance authorization', () => {
       ],
     }]);
     const service = new LedgerService(prisma);
-    const balance = await service.getMyBalance('user-a');
+    const balance = await service.getMyBalance('user-a', 'USD');
     expect(balance.balanceKobo).toBe('10000');
   });
 
-  it('isolates the balance and history to the mapped currency', async () => {
+  it('isolates balance and history to the requested currency', async () => {
     prisma.userLedgerAccount.findFirst.mockResolvedValue({
       accountId: 'acct-2100', currency: 'USD', isActive: true,
     });
@@ -60,11 +70,8 @@ describe('LedgerService user balance authorization', () => {
       },
     ]);
     const service = new LedgerService(prisma);
-    const balance = await service.getMyBalance('user-a');
+    const balance = await service.getMyBalance('user-a', 'USD');
     expect(balance.balanceKobo).toBe('70000');
-    expect(prisma.journalEntry.findMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: expect.objectContaining({ status: 'POSTED', currency: 'USD' }),
-    }));
 
     prisma.journalEntry.findMany.mockResolvedValue([
       {
@@ -73,24 +80,27 @@ describe('LedgerService user balance authorization', () => {
         lines: [{ accountId: 'acct-2100', direction: 'CREDIT', amountKobo: 70000n, metadata: { investorId: 'user-a' } }],
       },
     ]);
-    const transactions = await service.getMyTransactions('user-a', 20);
+    const transactions = await service.getMyTransactions('user-a', 'usd', 20);
     expect(transactions).toHaveLength(1);
+    expect(prisma.userLedgerAccount.findFirst).toHaveBeenLastCalledWith(expect.objectContaining({
+      where: { userId: 'user-a', currency: 'USD', isActive: true },
+    }));
     expect(prisma.journalEntry.findMany).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({ status: 'POSTED', currency: 'USD' }),
     }));
   });
 
   it('returns only posted entries for the authenticated investor', async () => {
-    prisma.userLedgerAccount.findFirst.mockResolvedValue({ accountId: 'acct-2100', currency: 'NGN', isActive: true });
+    prisma.userLedgerAccount.findFirst.mockResolvedValue({ accountId: 'acct-2100', currency: 'USD', isActive: true });
     const postedAt = new Date('2026-09-03T10:00:00.000Z');
     prisma.journalEntry.findMany.mockResolvedValue([
       {
-        id: 'entry-a', reference: 'DEP-1', description: 'Deposit DEP-1', currency: 'NGN', status: 'POSTED', postedAt,
+        id: 'entry-a', reference: 'DEP-1', description: 'Deposit DEP-1', currency: 'USD', status: 'POSTED', postedAt,
         metadata: { transactionId: 'tx-a' },
         lines: [{ accountId: 'acct-2100', direction: 'CREDIT', amountKobo: 125000n, metadata: { investorId: 'user-a' } }],
       },
       {
-        id: 'entry-b', reference: 'TRF-2', description: 'Transfer TRF-2', currency: 'NGN', status: 'POSTED', postedAt: new Date('2026-09-02T10:00:00.000Z'),
+        id: 'entry-b', reference: 'TRF-2', description: 'Transfer TRF-2', currency: 'USD', status: 'POSTED', postedAt: new Date('2026-09-02T10:00:00.000Z'),
         metadata: { sourceUserId: 'user-b', destinationUserId: 'user-a' },
         lines: [
           { accountId: 'acct-2100', direction: 'CREDIT', amountKobo: 50000n, metadata: { investorId: 'user-a' } },
@@ -99,22 +109,22 @@ describe('LedgerService user balance authorization', () => {
       },
     ]);
     const service = new LedgerService(prisma);
-    const transactions = await service.getMyTransactions('user-a', 20);
+    const transactions = await service.getMyTransactions('user-a', 'USD', 20);
 
     expect(transactions).toHaveLength(2);
     expect(transactions[0]).toMatchObject({ id: 'entry-a', reference: 'DEP-1', direction: 'CREDIT', amountKobo: '125000' });
     expect(transactions[1]).toMatchObject({ id: 'entry-b', reference: 'TRF-2', direction: 'CREDIT', amountKobo: '50000' });
     expect(prisma.journalEntry.findMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: expect.objectContaining({ status: 'POSTED', currency: 'NGN' }),
+      where: expect.objectContaining({ status: 'POSTED', currency: 'USD' }),
       take: 20,
     }));
   });
 
   it('limits transaction history to at most 100 entries', async () => {
-    prisma.userLedgerAccount.findFirst.mockResolvedValue({ accountId: 'acct-2100', currency: 'NGN', isActive: true });
+    prisma.userLedgerAccount.findFirst.mockResolvedValue({ accountId: 'acct-2100', currency: 'USD', isActive: true });
     prisma.journalEntry.findMany.mockResolvedValue([]);
     const service = new LedgerService(prisma);
-    await service.getMyTransactions('user-a', 500);
+    await service.getMyTransactions('user-a', 'USD', 500);
     expect(prisma.journalEntry.findMany).toHaveBeenCalledWith(expect.objectContaining({ take: 100 }));
   });
 });
