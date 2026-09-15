@@ -99,15 +99,12 @@ model User {
   refreshTokens  RefreshToken[]
   kycRecords     KYCRecord[]
   ledgerAccounts UserLedgerAccount[]
+  transactions   Transaction[]
+  auditLogs      AuditLog[]
+  journalEntriesCreated JournalEntry[] @relation("JournalEntryCreator")
 
   transfersSent     Transfer[] @relation("TransferSourceUser")
   transfersReceived Transfer[] @relation("TransferDestinationUser")
-
-  walletTransactions WalletTransaction[] @relation("WalletUser")
-  approvedWalletTx   WalletTransaction[] @relation("WalletApprover")
-  transactions       Transaction[]
-  auditLogs          AuditLog[]
-  journalEntriesCreated JournalEntry[] @relation("JournalEntryCreator")
 }
 
 model UserProfile {
@@ -230,15 +227,15 @@ model JournalEntry {
   currency        String
   status          EntryStatus   @default(DRAFT)
   metadata        Json?
-  postedAt        DateTime?
-  reversedAt      DateTime?
+  postedAt        DateTime
   reversalOfId    String?       @unique
   reversedById    String?       @unique
   createdByUserId String?
   createdAt       DateTime      @default(now())
-  updatedAt        DateTime      @updatedAt
 
   lines           JournalLine[]
+  transactions    Transaction[]
+  transfers       Transfer[]
   createdByUser   User?         @relation("JournalEntryCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
   reversalOf      JournalEntry? @relation("EntryReversal", fields: [reversalOfId], references: [id], onDelete: Restrict)
   reversals       JournalEntry[] @relation("EntryReversal")
@@ -283,7 +280,7 @@ model Transaction {
   updatedAt      DateTime          @updatedAt
   completedAt    DateTime?
 
-  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   journalEntry   JournalEntry? @relation(fields: [journalEntryId], references: [id], onDelete: SetNull)
 
   @@index([userId, status])
@@ -295,46 +292,23 @@ model Transfer {
   idempotencyKey     String         @unique
   sourceUserId       String
   destinationUserId  String
-  amountKobo         BigInt
-  currency           String
   status             TransferStatus @default(PENDING)
+  amountKobo         BigInt
+  currency           String         @default("NGN")
   reference          String         @unique
-  description        String?
+  journalEntryId     String?
   failureReason      String?
   metadata           Json?
-  journalEntryId     String?
-  completedAt        DateTime?
   createdAt          DateTime       @default(now())
   updatedAt          DateTime       @updatedAt
+  completedAt        DateTime?
 
-  sourceUser         User         @relation("TransferSourceUser", fields: [sourceUserId], references: [id], onDelete: Restrict)
-  destinationUser    User         @relation("TransferDestinationUser", fields: [destinationUserId], references: [id], onDelete: Restrict)
+  sourceUser         User          @relation("TransferSourceUser", fields: [sourceUserId], references: [id], onDelete: Restrict)
+  destinationUser    User          @relation("TransferDestinationUser", fields: [destinationUserId], references: [id], onDelete: Restrict)
   journalEntry       JournalEntry? @relation(fields: [journalEntryId], references: [id], onDelete: SetNull)
 
   @@index([sourceUserId, createdAt])
   @@index([destinationUserId, createdAt])
-  @@index([status, createdAt])
-}
-
-model WalletTransaction {
-  id             String            @id @default(cuid())
-  idempotencyKey String            @unique
-  userId         String
-  type           TransactionType
-  amountKobo     BigInt
-  currency       String
-  status         TransactionStatus @default(PENDING)
-  reference      String            @unique
-  description    String?
-  metadata       Json?
-  approvedById   String?
-  createdAt      DateTime          @default(now())
-  updatedAt      DateTime          @updatedAt
-
-  user       User  @relation("WalletUser", fields: [userId], references: [id], onDelete: Restrict)
-  approvedBy User? @relation("WalletApprover", fields: [approvedById], references: [id], onDelete: Restrict)
-
-  @@index([userId, createdAt])
   @@index([status, createdAt])
 }
 
