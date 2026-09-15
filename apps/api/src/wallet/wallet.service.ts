@@ -56,10 +56,10 @@ export class WalletService {
 
   async confirmRequest(transactionId: string, adminUserId: string) {
     const admin = await this.requireOperator(adminUserId);
-    const result = await this.prisma.$transaction(async (tx) => {
+    return this.prisma.$transaction(async (tx) => {
       const transaction = await tx.transaction.findUnique({ where: { id: transactionId } });
       if (!transaction) throw new NotFoundException('Wallet transaction not found');
-      if (transaction.status === TransactionStatus.COMPLETED) return { transaction, changed: false };
+      if (transaction.status === TransactionStatus.COMPLETED) return transaction;
       if (transaction.status !== TransactionStatus.PENDING) throw new BadRequestException(`Transaction cannot be confirmed from status ${transaction.status}`);
       const claimed = await tx.transaction.updateMany({ where: { id: transaction.id, status: TransactionStatus.PENDING }, data: { status: TransactionStatus.PROCESSING } });
       if (claimed.count !== 1) throw new BadRequestException('Transaction is already being processed');
@@ -69,26 +69,25 @@ export class WalletService {
       if (!entryResult.ok) throw new BadRequestException(entryResult.error.message);
       const journalEntry = await tx.journalEntry.create({ data: { id: entryResult.value.id, idempotencyKey: entryResult.value.idempotencyKey, reference: transaction.reference, description: `${transaction.type === TransactionType.DEPOSIT ? 'Deposit' : 'Withdrawal'} ${transaction.reference}`, currency: transaction.currency, status: EntryStatus.POSTED, postedAt: entryResult.value.postedAt, createdAt: entryResult.value.createdAt, createdByUserId: adminUserId, metadata: { transactionId: transaction.id, confirmedByUserId: adminUserId }, lines: { create: entryResult.value.lines.map((line) => ({ id: line.id, accountId: line.accountId, currency: transaction.currency, direction: line.direction, amountKobo: line.amountKobo, metadata: line.metadata, createdAt: line.createdAt })) } } });
       const updated = await tx.transaction.update({ where: { id: transaction.id }, data: { status: TransactionStatus.COMPLETED, journalEntryId: journalEntry.id, completedAt: new Date(), metadata: { workflow: transaction.type === TransactionType.DEPOSIT ? 'customer_deposit' : 'customer_withdrawal', confirmedByUserId: adminUserId } } });
-      return { transaction: updated, changed: true };
+      await this.audit.appendInTransaction(tx, { actorUserId: admin.id, actorRole: admin.role, eventType: 'WALLET_REQUEST_APPROVED', entityType: 'Transaction', entityId: updated.id, payload: { transactionId: updated.id, reference: updated.reference, type: updated.type, amountKobo: updated.amountKobo.toString(), currency: updated.currency } });
+      return updated;
     });
-    if (result.changed) await this.audit.append({ actorUserId: admin.id, actorRole: admin.role, eventType: 'WALLET_REQUEST_APPROVED', entityType: 'Transaction', entityId: result.transaction.id, payload: { transactionId: result.transaction.id, reference: result.transaction.reference, type: result.transaction.type, amountKobo: result.transaction.amountKobo.toString(), currency: result.transaction.currency } });
-    return result.transaction;
   }
 
   async rejectRequest(transactionId: string, adminUserId: string, reason?: string) {
     const admin = await this.requireOperator(adminUserId);
     const normalizedReason = reason?.trim() || 'Rejected by operator';
-    const result = await this.prisma.$transaction(async (tx) => {
+    return this.prisma.$transaction(async (tx) => {
       const transaction = await tx.transaction.findUnique({ where: { id: transactionId } });
       if (!transaction) throw new NotFoundException('Wallet transaction not found');
-      if (transaction.status === TransactionStatus.CANCELLED) return { transaction, changed: false };
+      if (transaction.status === TransactionStatus.CANCELLED) return transaction;
       if (transaction.status !== TransactionStatus.PENDING) throw new BadRequestException(`Transaction cannot be rejected from status ${transaction.status}`);
       const updated = await tx.transaction.updateMany({ where: { id: transaction.id, status: TransactionStatus.PENDING }, data: { status: TransactionStatus.CANCELLED, metadata: { workflow: transaction.type === TransactionType.DEPOSIT ? 'customer_deposit' : 'customer_withdrawal', rejectedByUserId: adminUserId, rejectionReason: normalizedReason } } });
       if (updated.count !== 1) throw new BadRequestException('Transaction is already being processed');
-      return { transaction: await tx.transaction.findUniqueOrThrow({ where: { id: transaction.id } }), changed: true };
+      const cancelled = await tx.transaction.findUniqueOrThrow({ where: { id: transaction.id } });
+      await this.audit.appendInTransaction(tx, { actorUserId: admin.id, actorRole: admin.role, eventType: 'WALLET_REQUEST_REJECTED', entityType: 'Transaction', entityId: cancelled.id, payload: { transactionId: cancelled.id, reference: cancelled.reference, type: cancelled.type, amountKobo: cancelled.amountKobo.toString(), currency: cancelled.currency, reason: normalizedReason } });
+      return cancelled;
     });
-    if (result.changed) await this.audit.append({ actorUserId: admin.id, actorRole: admin.role, eventType: 'WALLET_REQUEST_REJECTED', entityType: 'Transaction', entityId: result.transaction.id, payload: { transactionId: result.transaction.id, reference: result.transaction.reference, type: result.transaction.type, amountKobo: result.transaction.amountKobo.toString(), currency: result.transaction.currency, reason: normalizedReason } });
-    return result.transaction;
   }
 
   private async requireOperator(userId: string) {
