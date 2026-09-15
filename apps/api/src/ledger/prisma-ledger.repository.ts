@@ -28,6 +28,7 @@ export class PrismaLedgerRepository implements Repository {
             create: entry.lines.map((line) => ({
               id: line.id,
               accountId: line.accountId,
+              currency: 'NGN',
               direction: line.direction,
               amountKobo: line.amountKobo,
               metadata: line.metadata as Prisma.InputJsonValue,
