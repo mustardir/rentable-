@@ -85,6 +85,9 @@ jobs:
       - name: Run wallet idempotency concurrency integration test
         run: pnpm --filter @fortress-fund/api test -- --runInBand test/wallet-idempotency-concurrency.integration.spec.ts
 
+      - name: Run wallet operator approval/rejection race integration test
+        run: pnpm --filter @fortress-fund/api test -- --runInBand test/wallet-approval-rejection-concurrency.integration.spec.ts
+
       - name: Run financial product and DOCX unit tests
         run: pnpm --filter @fortress-fund/api test:vitest test/financial-product.defaults.spec.ts test/financial-product.service.spec.ts test/document-core.docx.spec.ts test/document-template.pipeline.spec.ts
 
