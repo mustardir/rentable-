@@ -108,7 +108,10 @@ describePrisma('Fortress Wallet Concurrency (PostgreSQL)', () => {
   });
 
   it('allows only one of two concurrent withdrawals to spend the exact same USD balance', async () => {
-    const service = new WalletService(prisma as any, { append: jest.fn().mockResolvedValue(undefined) } as any);
+    const service = new WalletService(prisma as any, {
+      append: jest.fn().mockResolvedValue(undefined),
+      appendInTransaction: jest.fn().mockResolvedValue(undefined),
+    } as any);
 
     const initialLines = await prisma.journalLine.findMany({
       where: {
