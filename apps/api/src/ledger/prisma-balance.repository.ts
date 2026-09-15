@@ -16,14 +16,17 @@ export class PrismaBalanceRepository {
     return this.balanceService.getAccountBalance(accountId, entries);
   }
 
-  async getInvestorBalance(accountId: string, investorId: string): Promise<bigint> {
-    const entries = await this.loadPostedEntries();
+  async getInvestorBalance(accountId: string, investorId: string, currency: string): Promise<bigint> {
+    const entries = await this.loadPostedEntries(currency);
     return this.balanceService.getInvestorBalance(accountId, investorId, entries);
   }
 
-  private async loadPostedEntries() {
+  private async loadPostedEntries(currency?: string) {
     const entries = await this.prisma.journalEntry.findMany({
-      where: { status: EntryStatus.POSTED },
+      where: {
+        status: EntryStatus.POSTED,
+        ...(currency ? { currency } : {}),
+      },
       include: { lines: true },
       orderBy: { createdAt: 'asc' },
     });
