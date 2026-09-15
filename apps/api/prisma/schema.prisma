@@ -219,7 +219,9 @@ model JournalEntry {
   lines           JournalLine[]
 
   reversalOf      JournalEntry? @relation("EntryReversal", fields: [reversalOfId], references: [id], onDelete: Restrict)
+  reversals       JournalEntry[] @relation("EntryReversal")
   reversedBy      JournalEntry? @relation("EntryReversedBy", fields: [reversedById], references: [id], onDelete: Restrict)
+  reversedEntries JournalEntry[] @relation("EntryReversedBy")
 
   @@index([status, createdAt])
   @@index([currency, status, createdAt])
