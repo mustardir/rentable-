@@ -85,7 +85,7 @@ export class WalletService {
     if (!user || !user.isActive || !['ADMIN', 'COMPLIANCE'].includes(user.role)) throw new ForbiddenException('Only an active admin or compliance user can perform wallet approvals');
     return user;
   }
-  private async lockBalance(tx: WalletTransactionClient, userId: string, currency: string) { await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`transfer:${userId}:${currency}`}, 0))`; }
+  private async lockBalance(tx: WalletTransactionClient, userId: string, currency: string) { await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`transfer:${userId}:${currency}`}, 0))::text`; }
   private async assertSufficientBalance(tx: WalletTransactionClient, userId: string, currency: string, amountKobo: bigint) {
     const lines = await tx.journalLine.findMany({ where: { accountId: CUSTOMER_DEPOSITS_ACCOUNT_ID, metadata: { path: ['investorId'], equals: userId }, journalEntry: { status: EntryStatus.POSTED, currency } }, select: { direction: true, amountKobo: true } });
     let availableKobo = 0n;
