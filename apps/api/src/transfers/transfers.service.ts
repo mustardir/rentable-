@@ -18,9 +18,7 @@ export class TransfersService {
       where: { idempotencyKey: dto.idempotencyKey },
       include: { journalEntry: { include: { lines: true } } },
     });
-    if (existing) {
-      return existing;
-    }
+    if (existing) return existing;
 
     if (dto.sourceUserId === dto.destinationUserId) {
       throw new BadRequestException('sourceUserId and destinationUserId must differ');
@@ -37,39 +35,30 @@ export class TransfersService {
           accountId: CUSTOMER_DEPOSITS_ACCOUNT_ID,
           direction: 'DEBIT',
           amountKobo,
-          metadata: {
-            investorId: dto.sourceUserId,
-            transferRole: 'source',
-            reference,
-          },
+          metadata: { investorId: dto.sourceUserId, transferRole: 'source', reference },
         },
         {
           accountId: CUSTOMER_DEPOSITS_ACCOUNT_ID,
           direction: 'CREDIT',
           amountKobo,
-          metadata: {
-            investorId: dto.destinationUserId,
-            transferRole: 'destination',
-            reference,
-          },
+          metadata: { investorId: dto.destinationUserId, transferRole: 'destination', reference },
         },
       ],
     });
 
-    if (!entryResult.ok) {
-      throw new BadRequestException(entryResult.error.message);
-    }
+    if (!entryResult.ok) throw new BadRequestException(entryResult.error.message);
 
     return this.prisma.$transaction(async (tx) => {
       const duplicate = await tx.transfer.findUnique({
         where: { idempotencyKey: dto.idempotencyKey },
         include: { journalEntry: { include: { lines: true } } },
       });
-      if (duplicate) {
-        return duplicate;
-      }
+      if (duplicate) return duplicate;
 
-      await this.assertSufficientBalance(tx, dto.sourceUserId, amountKobo);
+      // Transaction-scoped advisory lock serializes balance-check-and-post operations
+      // for the same investor and currency across all API instances/connections.
+      await this.lockSourceBalance(tx, dto.sourceUserId, currency);
+      await this.assertSufficientBalance(tx, dto.sourceUserId, currency, amountKobo);
 
       const transaction = await tx.transaction.create({
         data: {
@@ -80,10 +69,7 @@ export class TransfersService {
           currency,
           reference,
           idempotencyKey: dto.idempotencyKey,
-          metadata: {
-            sourceUserId: dto.sourceUserId,
-            destinationUserId: dto.destinationUserId,
-          },
+          metadata: { sourceUserId: dto.sourceUserId, destinationUserId: dto.destinationUserId },
         },
       });
 
@@ -96,11 +82,7 @@ export class TransfersService {
           currency,
           status: 'POSTED',
           postedAt: entryResult.value.postedAt,
-          metadata: {
-            transactionId: transaction.id,
-            sourceUserId: dto.sourceUserId,
-            destinationUserId: dto.destinationUserId,
-          },
+          metadata: { transactionId: transaction.id, sourceUserId: dto.sourceUserId, destinationUserId: dto.destinationUserId },
           createdAt: entryResult.value.createdAt,
           lines: {
             create: entryResult.value.lines.map((line) => ({
@@ -118,11 +100,7 @@ export class TransfersService {
 
       await tx.transaction.update({
         where: { id: transaction.id },
-        data: {
-          status: TransactionStatus.COMPLETED,
-          journalEntryId: journalEntry.id,
-          completedAt: new Date(),
-        },
+        data: { status: TransactionStatus.COMPLETED, journalEntryId: journalEntry.id, completedAt: new Date() },
       });
 
       return tx.transfer.create({
@@ -143,16 +121,21 @@ export class TransfersService {
     });
   }
 
+  private async lockSourceBalance(tx: TransferTransactionClient, userId: string, currency: string) {
+    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`transfer:${userId}:${currency}`}, 0))`;
+  }
+
   private async assertSufficientBalance(
     tx: TransferTransactionClient,
     userId: string,
+    currency: string,
     amountKobo: bigint,
   ) {
     const lines = await tx.journalLine.findMany({
       where: {
         accountId: CUSTOMER_DEPOSITS_ACCOUNT_ID,
         metadata: { path: ['investorId'], equals: userId },
-        journalEntry: { status: EntryStatus.POSTED },
+        journalEntry: { status: EntryStatus.POSTED, currency },
       },
       select: { direction: true, amountKobo: true },
     });
@@ -162,21 +145,13 @@ export class TransfersService {
       availableKobo += line.direction === 'CREDIT' ? line.amountKobo : -line.amountKobo;
     }
 
-    if (availableKobo < amountKobo) {
-      throw new BadRequestException('Insufficient available balance');
-    }
+    if (availableKobo < amountKobo) throw new BadRequestException('Insufficient available balance');
   }
 
   private parseAmountKobo(value: string): bigint {
-    if (!/^\d+$/.test(value)) {
-      throw new BadRequestException('amountKobo must be a positive integer string');
-    }
-
+    if (!/^\d+$/.test(value)) throw new BadRequestException('amountKobo must be a positive integer string');
     const parsed = BigInt(value);
-    if (parsed <= 0n) {
-      throw new BadRequestException('amountKobo must be greater than 0');
-    }
-
+    if (parsed <= 0n) throw new BadRequestException('amountKobo must be greater than 0');
     return parsed;
   }
 }
