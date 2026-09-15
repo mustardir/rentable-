@@ -57,7 +57,8 @@ export class WalletService {
       if (transaction.status !== TransactionStatus.PENDING) throw new BadRequestException(`Transaction cannot be confirmed from status ${transaction.status}`);
       const claimed = await tx.transaction.updateMany({ where: { id: transaction.id, status: TransactionStatus.PENDING }, data: { status: TransactionStatus.PROCESSING } });
       if (claimed.count !== 1) throw new BadRequestException('Transaction is already being processed');
-      if (transaction.type === TransactionType.WITHDRAWAL) await this.assertSufficientBalance(tx, transaction.userId, transaction.amountKobo);
+      await this.lockBalance(tx, transaction.userId, transaction.currency);
+      if (transaction.type === TransactionType.WITHDRAWAL) await this.assertSufficientBalance(tx, transaction.userId, transaction.currency, transaction.amountKobo);
 
       const entryResult = this.postingEngine.buildEntry({
         idempotencyKey: `wallet:${transaction.idempotencyKey}`,
@@ -107,8 +108,12 @@ export class WalletService {
     return user;
   }
 
-  private async assertSufficientBalance(tx: WalletTransactionClient, userId: string, amountKobo: bigint) {
-    const lines = await tx.journalLine.findMany({ where: { accountId: CUSTOMER_DEPOSITS_ACCOUNT_ID, metadata: { path: ['investorId'], equals: userId }, journalEntry: { status: EntryStatus.POSTED } }, select: { direction: true, amountKobo: true } });
+  private async lockBalance(tx: WalletTransactionClient, userId: string, currency: string) {
+    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`transfer:${userId}:${currency}`}, 0))`;
+  }
+
+  private async assertSufficientBalance(tx: WalletTransactionClient, userId: string, currency: string, amountKobo: bigint) {
+    const lines = await tx.journalLine.findMany({ where: { accountId: CUSTOMER_DEPOSITS_ACCOUNT_ID, metadata: { path: ['investorId'], equals: userId }, journalEntry: { status: EntryStatus.POSTED, currency } }, select: { direction: true, amountKobo: true } });
     let availableKobo = 0n;
     for (const line of lines) availableKobo += line.direction === 'CREDIT' ? line.amountKobo : -line.amountKobo;
     if (availableKobo < amountKobo) throw new BadRequestException('Insufficient available balance');
