@@ -30,7 +30,7 @@ describe('WalletService idempotency concurrency', () => {
     let releaseBothReads!: () => void;
     const bothReads = new Promise<void>((resolve) => { releaseBothReads = resolve; });
 
-    const findUniqueSpy = jest.spyOn(prisma.transaction, 'findUnique').mockImplementation(async (args: any) => {
+    const findUniqueSpy = jest.spyOn(prisma.transaction, 'findUnique').mockImplementation((async (args: any) => {
       const result = await originalFindUnique(args);
       if (args?.where?.idempotencyKey === idempotencyKey && firstReadCount < 2) {
         firstReadCount += 1;
@@ -39,7 +39,7 @@ describe('WalletService idempotency concurrency', () => {
         await bothReads;
       }
       return result;
-    });
+    }) as any);
 
     const releaseTask = bothReads.then(() => release());
     const results = await Promise.all([
