@@ -1,3 +1,6 @@
+// Prisma schema for Fortress Fund
+// Keep financial amounts integer-only in minor units (kobo/cents); never use Decimal for ledger money.
+
 generator client {
   provider = "prisma-client-js"
 }
@@ -7,17 +10,19 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum Role {
-  USER
-  ADMIN
-  COMPLIANCE
+enum UserRole {
+  INVESTOR
+  PORTFOLIO_MANAGER
+  TREASURY_MANAGER
+  COMPLIANCE_OFFICER
+  SUPER_ADMIN
 }
 
 enum KYCStatus {
   PENDING
-  IN_REVIEW
   APPROVED
   REJECTED
+  UNDER_REVIEW
 }
 
 enum KYCLevel {
@@ -46,55 +51,47 @@ enum EntryStatus {
   REVERSED
 }
 
-enum TransactionType {
-  DEPOSIT
-  WITHDRAWAL
-  TRANSFER
-  INVESTMENT_PURCHASE
-  REDEMPTION
-  ADJUSTMENT
-}
-
 enum TransactionStatus {
   PENDING
   PROCESSING
   COMPLETED
   FAILED
-  REVERSED
-  CANCELLED
+  REJECTED
 }
 
-enum TransferStatus {
-  PENDING
-  PROCESSING
-  COMPLETED
-  FAILED
-  REVERSED
-  CANCELLED
+enum TransactionType {
+  DEPOSIT
+  WITHDRAWAL
+  TRANSFER
+  FEE
+  INVESTMENT
+  DIVESTMENT
+  EXCHANGE
 }
 
 model User {
-  id             String         @id @default(cuid())
-  email          String         @unique
+  id             String              @id @default(cuid())
+  email          String              @unique
   passwordHash   String
-  role           Role           @default(USER)
-  isActive       Boolean        @default(true)
-  createdAt      DateTime       @default(now())
-  updatedAt      DateTime       @updatedAt
+  role           UserRole            @default(INVESTOR)
+  isActive       Boolean             @default(true)
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
 
-  profile        Profile?
+  profile        UserProfile?
   sessions       Session[]
   refreshTokens  RefreshToken[]
   kycRecords     KYCRecord[]
-  auditLogs      AuditLog[]
-  journalEntries JournalEntry[] @relation("JournalEntryCreatedBy")
-  transactions   Transaction[]
-  transfersSent  Transfer[]     @relation("TransferSourceUser")
-  transfersReceived Transfer[]  @relation("TransferDestinationUser")
   ledgerAccounts UserLedgerAccount[]
+
+  transfersSent     Transfer[] @relation("TransferSourceUser")
+  transfersReceived Transfer[] @relation("TransferDestinationUser")
+
+  walletTransactions WalletTransaction[] @relation("WalletUser")
+  approvedWalletTx   WalletTransaction[] @relation("WalletApprover")
 }
 
-model Profile {
+model UserProfile {
   id             String      @id @default(cuid())
   userId         String      @unique
   firstName      String?
@@ -167,41 +164,41 @@ model KYCRecord {
 }
 
 model Account {
-  id            String      @id @default(cuid())
-  code          String      @unique
-  name          String
-  type          AccountType
-  normalBalance Direction
-  parentId      String?
-  parent        Account?    @relation("AccountHierarchy", fields: [parentId], references: [id])
-  children      Account[]   @relation("AccountHierarchy")
-  isActive      Boolean     @default(true)
-  metadata      Json?
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
+  id              String              @id @default(cuid())
+  code            String              @unique
+  name            String
+  type            AccountType
+  normalBalance   Direction
+  parentId        String?
+  parent          Account?            @relation("AccountHierarchy", fields: [parentId], references: [id])
+  children        Account[]           @relation("AccountHierarchy")
+  isActive        Boolean             @default(true)
+  metadata        Json?
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
 
-  journalLines  JournalLine[]
-  ledgerAccounts UserLedgerAccount[]
+  journalLines    JournalLine[]
+  ledgerAccounts  UserLedgerAccount[]
 
   @@index([parentId])
   @@index([type])
 }
 
 model UserLedgerAccount {
-  id String @id @default(cuid())
-  userId String
-  accountId String
-  currency String @default("NGN")
-  isActive Boolean @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id          String   @id @default(cuid())
+  userId      String
+  accountId   String
+  currency    String   @default("NGN")
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  account Account @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  user        User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  account     Account @relation(fields: [accountId], references: [id], onDelete: Restrict)
 
-  @@unique([userId, accountId])
-  @@index([userId, isActive])
-  @@index([accountId, isActive])
+  @@unique([userId, accountId, currency])
+  @@index([userId, currency, isActive])
+  @@index([accountId, currency, isActive])
 }
 
 model JournalEntry {
@@ -209,133 +206,80 @@ model JournalEntry {
   idempotencyKey  String        @unique
   reference       String        @unique
   description     String
-  currency        String        @default("NGN")
-  status          EntryStatus   @default(POSTED)
-  postedAt        DateTime
-  reversalOfId    String?
-  reversedById    String?
+  currency        String
+  status          EntryStatus   @default(DRAFT)
   metadata        Json?
+  postedAt        DateTime?
+  reversedAt      DateTime?
+  reversalOfId    String?       @unique
+  reversedById    String?       @unique
   createdAt       DateTime      @default(now())
-  createdByUserId String?
+  updatedAt        DateTime      @updatedAt
 
   lines           JournalLine[]
-  createdByUser   User?         @relation("JournalEntryCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
-  reversalOf      JournalEntry? @relation("JournalEntryReversalOf", fields: [reversalOfId], references: [id])
-  reversals       JournalEntry[] @relation("JournalEntryReversalOf")
-  reversedBy      JournalEntry? @relation("JournalEntryReversedBy", fields: [reversedById], references: [id])
-  reversedEntries JournalEntry[] @relation("JournalEntryReversedBy")
-  transactions    Transaction[]
-  transfers       Transfer[]
 
-  @@index([status])
-  @@index([postedAt])
-  @@index([createdByUserId])
+  reversalOf      JournalEntry? @relation("EntryReversal", fields: [reversalOfId], references: [id], onDelete: Restrict)
+  reversedBy      JournalEntry? @relation("EntryReversedBy", fields: [reversedById], references: [id], onDelete: Restrict)
+
+  @@index([status, createdAt])
+  @@index([currency, status, createdAt])
 }
 
 model JournalLine {
-  id             String       @id @default(cuid())
+  id             String     @id @default(cuid())
   journalEntryId String
   accountId      String
   direction      Direction
   amountKobo     BigInt
-  description    String?
   metadata       Json?
-  createdAt      DateTime     @default(now())
+  createdAt      DateTime   @default(now())
 
   journalEntry   JournalEntry @relation(fields: [journalEntryId], references: [id], onDelete: Restrict)
   account        Account      @relation(fields: [accountId], references: [id], onDelete: Restrict)
 
+  @@index([accountId, createdAt])
   @@index([journalEntryId])
-  @@index([accountId])
-  @@index([createdAt])
-}
-
-model Transaction {
-  id             String            @id @default(cuid())
-  userId         String
-  type           TransactionType
-  status         TransactionStatus @default(PENDING)
-  amountKobo     BigInt
-  currency       String            @default("NGN")
-  reference      String            @unique
-  idempotencyKey String            @unique
-  journalEntryId String?
-  failureReason  String?
-  metadata       Json?
-  createdAt      DateTime          @default(now())
-  updatedAt      DateTime          @updatedAt
-  completedAt    DateTime?
-
-  user           User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  journalEntry   JournalEntry?     @relation(fields: [journalEntryId], references: [id])
-
-  @@index([userId, status])
-  @@index([createdAt])
 }
 
 model Transfer {
-  id                    String            @id @default(cuid())
-  sourceUserId          String
-  destinationUserId     String
-  status                TransferStatus    @default(PENDING)
-  amountKobo            BigInt
-  currency              String            @default("NGN")
-  reference             String            @unique
-  idempotencyKey        String            @unique
-  journalEntryId        String?
-  failureReason         String?
-  metadata              Json?
-  createdAt             DateTime          @default(now())
-  updatedAt             DateTime          @updatedAt
-  completedAt           DateTime?
+  id                 String            @id @default(cuid())
+  idempotencyKey     String            @unique
+  sourceUserId       String
+  destinationUserId  String
+  amountKobo         BigInt
+  currency           String
+  status             TransactionStatus @default(PENDING)
+  reference          String            @unique
+  description        String?
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
 
-  sourceUser            User              @relation("TransferSourceUser", fields: [sourceUserId], references: [id], onDelete: Restrict)
-  destinationUser       User              @relation("TransferDestinationUser", fields: [destinationUserId], references: [id], onDelete: Restrict)
-  journalEntry          JournalEntry?     @relation(fields: [journalEntryId], references: [id])
+  sourceUser         User              @relation("TransferSourceUser", fields: [sourceUserId], references: [id], onDelete: Restrict)
+  destinationUser    User              @relation("TransferDestinationUser", fields: [destinationUserId], references: [id], onDelete: Restrict)
 
-  @@index([sourceUserId, status])
-  @@index([destinationUserId, status])
-  @@index([createdAt])
+  @@index([sourceUserId, createdAt])
+  @@index([destinationUserId, createdAt])
+  @@index([status, createdAt])
 }
 
-model WalletBalanceCache {
-  investorId        String   @id
-  availableKobo     BigInt
-  currency          String   @default("NGN")
-  lastJournalLineId String
-  rebuiltAt         DateTime @updatedAt
-}
-
-model AuditEvent {
-  id            String   @id @default(cuid())
-  sequence      BigInt   @default(autoincrement())
-  actorUserId   String?
-  actorRole     String?
-  eventType     String
-  entityType    String
-  entityId      String
-  payload       Json
-  previousHash  String?
-  hash          String
-  createdAt     DateTime @default(now())
-
-  @@index([entityType, entityId])
-  @@index([eventType])
-  @@index([createdAt])
-}
-
-model AuditLog {
-  id             String      @id @default(cuid())
-  userId         String?
-  action         String
-  entityType     String
-  entityId       String?
+model WalletTransaction {
+  id             String            @id @default(cuid())
+  idempotencyKey String            @unique
+  userId         String
+  type           TransactionType
+  amountKobo     BigInt
+  currency       String
+  status         TransactionStatus @default(PENDING)
+  reference      String            @unique
+  description    String?
   metadata       Json?
-  createdAt      DateTime    @default(now())
+  approvedById   String?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
 
-  user           User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  user       User  @relation("WalletUser", fields: [userId], references: [id], onDelete: Restrict)
+  approvedBy User? @relation("WalletApprover", fields: [approvedById], references: [id], onDelete: Restrict)
 
-  @@index([userId])
-  @@index([entityType, entityId])
-  @@index([createdAt])
+  @@index([userId, createdAt])
+  @@index([status, createdAt])
 }
