@@ -75,6 +75,7 @@ describe('WalletService', () => {
 
     expect(result.status).toBe('COMPLETED');
     expect(txQueryRaw).toHaveBeenCalledTimes(1);
+    expect(txQueryRaw.mock.calls[0][0]).toEqual(expect.objectContaining({ strings: expect.any(Array) }));
     expect(prisma.journalEntry.create).toHaveBeenCalledTimes(1);
     expect(prisma.journalEntry.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ idempotencyKey: 'wallet:dep-1', currency: 'USD', createdByUserId: 'admin-1' }) }));
     expect(audit.append).toHaveBeenCalledTimes(1);
