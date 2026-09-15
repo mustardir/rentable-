@@ -12,29 +12,12 @@ type WalletTransactionClient = Prisma.TransactionClient;
 @Injectable()
 export class WalletService {
   private readonly postingEngine = new PostingEngine();
-
   constructor(private readonly prisma: PrismaService, private readonly audit: PrismaAuditRepository) {}
 
-  async getOperatorRequests(limit = 50) {
-    return this.prisma.transaction.findMany({
-      where: { type: { in: [TransactionType.DEPOSIT, TransactionType.WITHDRAWAL] }, status: TransactionStatus.PENDING },
-      orderBy: { createdAt: 'asc' },
-      take: Math.min(100, Math.max(1, limit)),
-      select: { id: true, type: true, status: true, amountKobo: true, currency: true, reference: true, idempotencyKey: true, journalEntryId: true, completedAt: true, createdAt: true, user: { select: { id: true, email: true, profile: { select: { firstName: true, lastName: true } } } } },
-    });
-  }
-
+  async getOperatorRequests(limit = 50) { return this.prisma.transaction.findMany({ where: { type: { in: [TransactionType.DEPOSIT, TransactionType.WITHDRAWAL] }, status: TransactionStatus.PENDING }, orderBy: { createdAt: 'asc' }, take: Math.min(100, Math.max(1, limit)), select: { id: true, type: true, status: true, amountKobo: true, currency: true, reference: true, idempotencyKey: true, journalEntryId: true, completedAt: true, createdAt: true, user: { select: { id: true, email: true, profile: { select: { firstName: true, lastName: true } } } } } }); }
   forbiddenOperator(): never { throw new ForbiddenException('Only an active admin or compliance user can access wallet approvals'); }
-
-  async createDepositRequest(userId: string, dto: CreateWalletRequestDto) {
-    await this.assertActiveUser(userId);
-    return this.createRequest(userId, dto, TransactionType.DEPOSIT);
-  }
-
-  async createWithdrawalRequest(userId: string, dto: CreateWalletRequestDto) {
-    await this.assertActiveUser(userId);
-    return this.createRequest(userId, dto, TransactionType.WITHDRAWAL);
-  }
+  async createDepositRequest(userId: string, dto: CreateWalletRequestDto) { await this.assertActiveUser(userId); return this.createRequest(userId, dto, TransactionType.DEPOSIT); }
+  async createWithdrawalRequest(userId: string, dto: CreateWalletRequestDto) { await this.assertActiveUser(userId); return this.createRequest(userId, dto, TransactionType.WITHDRAWAL); }
 
   private async createRequest(userId: string, dto: CreateWalletRequestDto, type: TransactionType) {
     const amountKobo = this.parseAmountKobo(dto.amountKobo);
@@ -60,27 +43,19 @@ export class WalletService {
       if (claimed.count !== 1) throw new BadRequestException('Transaction is already being processed');
       await this.lockBalance(tx, transaction.userId, transaction.currency);
       if (transaction.type === TransactionType.WITHDRAWAL) await this.assertSufficientBalance(tx, transaction.userId, transaction.currency, transaction.amountKobo);
-
-      const entryResult = this.postingEngine.buildEntry({
-        idempotencyKey: `wallet:${transaction.idempotencyKey}`,
-        lines: transaction.type === TransactionType.DEPOSIT
-          ? [
-              { accountId: INVESTOR_CASH_ACCOUNT_ID, direction: 'DEBIT', amountKobo: transaction.amountKobo, metadata: { investorId: transaction.userId, transactionType: 'DEPOSIT', reference: transaction.reference } },
-              { accountId: CUSTOMER_DEPOSITS_ACCOUNT_ID, direction: 'CREDIT', amountKobo: transaction.amountKobo, metadata: { investorId: transaction.userId, transactionType: 'DEPOSIT', reference: transaction.reference } },
-            ]
-          : [
-              { accountId: CUSTOMER_DEPOSITS_ACCOUNT_ID, direction: 'DEBIT', amountKobo: transaction.amountKobo, metadata: { investorId: transaction.userId, transactionType: 'WITHDRAWAL', reference: transaction.reference } },
-              { accountId: INVESTOR_CASH_ACCOUNT_ID, direction: 'CREDIT', amountKobo: transaction.amountKobo, metadata: { investorId: transaction.userId, transactionType: 'WITHDRAWAL', reference: transaction.reference } },
-            ],
-      });
+      const entryResult = this.postingEngine.buildEntry({ idempotencyKey: `wallet:${transaction.idempotencyKey}`, lines: transaction.type === TransactionType.DEPOSIT ? [
+        { accountId: INVESTOR_CASH_ACCOUNT_ID, direction: 'DEBIT', amountKobo: transaction.amountKobo, metadata: { investorId: transaction.userId, transactionType: 'DEPOSIT', reference: transaction.reference } },
+        { accountId: CUSTOMER_DEPOSITS_ACCOUNT_ID, direction: 'CREDIT', amountKobo: transaction.amountKobo, metadata: { investorId: transaction.userId, transactionType: 'DEPOSIT', reference: transaction.reference } },
+      ] : [
+        { accountId: CUSTOMER_DEPOSITS_ACCOUNT_ID, direction: 'DEBIT', amountKobo: transaction.amountKobo, metadata: { investorId: transaction.userId, transactionType: 'WITHDRAWAL', reference: transaction.reference } },
+        { accountId: INVESTOR_CASH_ACCOUNT_ID, direction: 'CREDIT', amountKobo: transaction.amountKobo, metadata: { investorId: transaction.userId, transactionType: 'WITHDRAWAL', reference: transaction.reference } },
+      ] });
       if (!entryResult.ok) throw new BadRequestException(entryResult.error.message);
       const journalEntry = await tx.journalEntry.create({ data: { id: entryResult.value.id, idempotencyKey: entryResult.value.idempotencyKey, reference: transaction.reference, description: `${transaction.type === TransactionType.DEPOSIT ? 'Deposit' : 'Withdrawal'} ${transaction.reference}`, currency: transaction.currency, status: EntryStatus.POSTED, postedAt: entryResult.value.postedAt, createdAt: entryResult.value.createdAt, createdByUserId: adminUserId, metadata: { transactionId: transaction.id, confirmedByUserId: adminUserId }, lines: { create: entryResult.value.lines.map((line) => ({ id: line.id, accountId: line.accountId, direction: line.direction, amountKobo: line.amountKobo, metadata: line.metadata, createdAt: line.createdAt })) } } });
       const updated = await tx.transaction.update({ where: { id: transaction.id }, data: { status: TransactionStatus.COMPLETED, journalEntryId: journalEntry.id, completedAt: new Date(), metadata: { workflow: transaction.type === TransactionType.DEPOSIT ? 'customer_deposit' : 'customer_withdrawal', confirmedByUserId: adminUserId } } });
       return { transaction: updated, changed: true };
     });
-    if (result.changed) {
-      await this.audit.append({ actorUserId: admin.id, actorRole: admin.role, eventType: 'WALLET_REQUEST_APPROVED', entityType: 'Transaction', entityId: result.transaction.id, payload: { transactionId: result.transaction.id, reference: result.transaction.reference, type: result.transaction.type, amountKobo: result.transaction.amountKobo.toString(), currency: result.transaction.currency } });
-    }
+    if (result.changed) await this.audit.append({ actorUserId: admin.id, actorRole: admin.role, eventType: 'WALLET_REQUEST_APPROVED', entityType: 'Transaction', entityId: result.transaction.id, payload: { transactionId: result.transaction.id, reference: result.transaction.reference, type: result.transaction.type, amountKobo: result.transaction.amountKobo.toString(), currency: result.transaction.currency } });
     return result.transaction;
   }
 
@@ -94,12 +69,9 @@ export class WalletService {
       if (transaction.status !== TransactionStatus.PENDING) throw new BadRequestException(`Transaction cannot be rejected from status ${transaction.status}`);
       const updated = await tx.transaction.updateMany({ where: { id: transaction.id, status: TransactionStatus.PENDING }, data: { status: TransactionStatus.CANCELLED, metadata: { workflow: transaction.type === TransactionType.DEPOSIT ? 'customer_deposit' : 'customer_withdrawal', rejectedByUserId: adminUserId, rejectionReason: normalizedReason } } });
       if (updated.count !== 1) throw new BadRequestException('Transaction is already being processed');
-      const cancelled = await tx.transaction.findUniqueOrThrow({ where: { id: transaction.id } });
-      return { transaction: cancelled, changed: true };
+      return { transaction: await tx.transaction.findUniqueOrThrow({ where: { id: transaction.id } }), changed: true };
     });
-    if (result.changed) {
-      await this.audit.append({ actorUserId: admin.id, actorRole: admin.role, eventType: 'WALLET_REQUEST_REJECTED', entityType: 'Transaction', entityId: result.transaction.id, payload: { transactionId: result.transaction.id, reference: result.transaction.reference, type: result.transaction.type, amountKobo: result.transaction.amountKobo.toString(), currency: result.transaction.currency, reason: normalizedReason } });
-    }
+    if (result.changed) await this.audit.append({ actorUserId: admin.id, actorRole: admin.role, eventType: 'WALLET_REQUEST_REJECTED', entityType: 'Transaction', entityId: result.transaction.id, payload: { transactionId: result.transaction.id, reference: result.transaction.reference, type: result.transaction.type, amountKobo: result.transaction.amountKobo.toString(), currency: result.transaction.currency, reason: normalizedReason } });
     return result.transaction;
   }
 
@@ -108,33 +80,18 @@ export class WalletService {
     if (!user || !user.isActive || !['ADMIN', 'COMPLIANCE'].includes(user.role)) throw new ForbiddenException('Only an active admin or compliance user can perform wallet approvals');
     return user;
   }
-
-  private async lockBalance(tx: WalletTransactionClient, userId: string, currency: string) {
-    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`transfer:${userId}:${currency}`}, 0))`;
-  }
-
+  private async lockBalance(tx: WalletTransactionClient, userId: string, currency: string) { await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`transfer:${userId}:${currency}`}, 0))`; }
   private async assertSufficientBalance(tx: WalletTransactionClient, userId: string, currency: string, amountKobo: bigint) {
     const lines = await tx.journalLine.findMany({ where: { accountId: CUSTOMER_DEPOSITS_ACCOUNT_ID, metadata: { path: ['investorId'], equals: userId }, journalEntry: { status: EntryStatus.POSTED, currency } }, select: { direction: true, amountKobo: true } });
     let availableKobo = 0n;
     for (const line of lines) availableKobo += line.direction === 'CREDIT' ? line.amountKobo : -line.amountKobo;
     if (availableKobo < amountKobo) throw new BadRequestException('Insufficient available balance');
   }
-
-  private async assertActiveUser(userId: string) {
-    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { id: true, isActive: true } });
-    if (!user || !user.isActive) throw new NotFoundException('Investor not found');
-  }
-
+  private async assertActiveUser(userId: string) { const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { id: true, isActive: true } }); if (!user || !user.isActive) throw new NotFoundException('Investor not found'); }
   private normalizeCurrency(currency?: string): string {
     const normalized = currency?.trim().toUpperCase();
-    if (!/^[A-Z]{3}$/.test(normalized ?? '')) throw new BadRequestException('INVALID_CURRENCY');
+    if (normalized === undefined || !/^[A-Z]{3}$/.test(normalized)) throw new BadRequestException('INVALID_CURRENCY');
     return normalized;
   }
-
-  private parseAmountKobo(value: string): bigint {
-    if (!/^\d+$/.test(value)) throw new BadRequestException('amountKobo must be a positive integer string');
-    const amount = BigInt(value);
-    if (amount <= 0n) throw new BadRequestException('amountKobo must be greater than 0');
-    return amount;
-  }
+  private parseAmountKobo(value: string): bigint { if (!/^\d+$/.test(value)) throw new BadRequestException('amountKobo must be a positive integer string'); const amount = BigInt(value); if (amount <= 0n) throw new BadRequestException('amountKobo must be greater than 0'); return amount; }
 }
