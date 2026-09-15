@@ -1,10 +1,11 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { PostingEngine } from '@fortress/ledger-core';
-import { TransactionStatus, TransactionType, TransferStatus } from '@prisma/client';
+import { EntryStatus, TransactionStatus, TransactionType, TransferStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import type { CreateTransferDto } from './dto/create-transfer.dto';
 
 const CUSTOMER_DEPOSITS_ACCOUNT_ID = 'acct_2100';
+type TransferTransactionClient = Prisma.TransactionClient;
 
 @Injectable()
 export class TransfersService {
@@ -67,6 +68,8 @@ export class TransfersService {
       if (duplicate) {
         return duplicate;
       }
+
+      await this.assertSufficientBalance(tx, dto.sourceUserId, amountKobo);
 
       const transaction = await tx.transaction.create({
         data: {
@@ -138,6 +141,30 @@ export class TransfersService {
         include: { journalEntry: { include: { lines: true } } },
       });
     });
+  }
+
+  private async assertSufficientBalance(
+    tx: TransferTransactionClient,
+    userId: string,
+    amountKobo: bigint,
+  ) {
+    const lines = await tx.journalLine.findMany({
+      where: {
+        accountId: CUSTOMER_DEPOSITS_ACCOUNT_ID,
+        metadata: { path: ['investorId'], equals: userId },
+        journalEntry: { status: EntryStatus.POSTED },
+      },
+      select: { direction: true, amountKobo: true },
+    });
+
+    let availableKobo = 0n;
+    for (const line of lines) {
+      availableKobo += line.direction === 'CREDIT' ? line.amountKobo : -line.amountKobo;
+    }
+
+    if (availableKobo < amountKobo) {
+      throw new BadRequestException('Insufficient available balance');
+    }
   }
 
   private parseAmountKobo(value: string): bigint {
