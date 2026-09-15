@@ -13,13 +13,17 @@ export class LedgerController {
   constructor(private readonly ledgerService: LedgerService) {}
 
   @Get('me/balance')
-  getMyBalance(@Req() req: AuthenticatedRequest) {
-    return this.ledgerService.getMyBalance(req.user.id);
+  getMyBalance(@Req() req: AuthenticatedRequest, @Query('currency') currency?: string) {
+    return this.ledgerService.getMyBalance(req.user.id, currency ?? '');
   }
 
   @Get('me/transactions')
-  getMyTransactions(@Req() req: AuthenticatedRequest, @Query('limit') limit?: string) {
+  getMyTransactions(
+    @Req() req: AuthenticatedRequest,
+    @Query('currency') currency?: string,
+    @Query('limit') limit?: string,
+  ) {
     const parsedLimit = limit === undefined ? 20 : Number(limit);
-    return this.ledgerService.getMyTransactions(req.user.id, parsedLimit);
+    return this.ledgerService.getMyTransactions(req.user.id, currency ?? '', parsedLimit);
   }
 }
