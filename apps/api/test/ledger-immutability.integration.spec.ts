@@ -2,11 +2,11 @@
  * Integration tests for ledger immutability fortress_guard triggers.
  *
  * The database is intentionally append-only: posted entries and journal lines
- * cannot be deleted or modified. Tests therefore use the seeded chart of
- * accounts and do not attempt destructive cleanup of financial records.
+ * cannot be deleted or modified. Tests therefore create the minimum chart of
+ * accounts they need and do not attempt destructive cleanup of financial records.
  */
 
-import { PrismaClient, EntryStatus, Direction } from '@prisma/client';
+import { PrismaClient, EntryStatus, Direction, AccountType } from '@prisma/client';
 
 const prisma = new PrismaClient();
 const DATABASE_URL = process.env.DATABASE_URL;
@@ -17,6 +17,34 @@ const INVESTOR_CASH_ACCOUNT_ID = 'acct_1100';
 
 describePrisma('Fortress Ledger Immutability (PostgreSQL Triggers)', () => {
   const prefix = `ledger-immutable-${Date.now()}-${process.pid}`;
+
+  beforeAll(async () => {
+    await prisma.account.upsert({
+      where: { code: '1100' },
+      update: {},
+      create: {
+        id: INVESTOR_CASH_ACCOUNT_ID,
+        code: '1100',
+        name: 'Investor Cash Test Account',
+        type: AccountType.ASSET,
+        normalBalance: Direction.DEBIT,
+        metadata: { source: 'ledger-immutability-test' },
+      },
+    });
+
+    await prisma.account.upsert({
+      where: { code: '2100' },
+      update: {},
+      create: {
+        id: CUSTOMER_DEPOSITS_ACCOUNT_ID,
+        code: '2100',
+        name: 'Customer Deposits Test Account',
+        type: AccountType.LIABILITY,
+        normalBalance: Direction.CREDIT,
+        metadata: { source: 'ledger-immutability-test' },
+      },
+    });
+  });
 
   afterAll(async () => {
     await prisma.$disconnect();
