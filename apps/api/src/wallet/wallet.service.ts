@@ -28,18 +28,12 @@ export class WalletService {
       this.assertIdempotentReplay(existing, userId, type, amountKobo, currency, reference);
       return existing;
     }
-
     try {
       return await this.prisma.transaction.create({ data: { userId, type, status: TransactionStatus.PENDING, amountKobo, currency, reference, idempotencyKey: dto.idempotencyKey, metadata: { workflow: type === TransactionType.DEPOSIT ? 'customer_deposit' : 'customer_withdrawal' } } });
     } catch (error) {
       if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== 'P2002') throw error;
-      const target = Array.isArray(error.meta?.target)
-        ? error.meta.target.map(String)
-        : typeof error.meta?.target === 'string'
-          ? [error.meta.target]
-          : [];
+      const target = Array.isArray(error.meta?.target) ? error.meta.target.map(String) : typeof error.meta?.target === 'string' ? [error.meta.target] : [];
       if (!target.includes('idempotencyKey')) throw error;
-
       const concurrent = await this.prisma.transaction.findUnique({ where: { idempotencyKey: dto.idempotencyKey } });
       if (!concurrent) throw error;
       this.assertIdempotentReplay(concurrent, userId, type, amountKobo, currency, reference);
@@ -48,9 +42,7 @@ export class WalletService {
   }
 
   private assertIdempotentReplay(existing: { userId: string; type: TransactionType; amountKobo: bigint; currency: string; reference: string }, userId: string, type: TransactionType, amountKobo: bigint, currency: string, reference: string) {
-    if (existing.userId !== userId || existing.type !== type || existing.amountKobo !== amountKobo || existing.currency !== currency || existing.reference !== reference) {
-      throw new BadRequestException('IDEMPOTENCY_CONFLICT');
-    }
+    if (existing.userId !== userId || existing.type !== type || existing.amountKobo !== amountKobo || existing.currency !== currency || existing.reference !== reference) throw new BadRequestException('IDEMPOTENCY_CONFLICT');
   }
 
   async confirmRequest(transactionId: string, adminUserId: string) {
@@ -64,13 +56,7 @@ export class WalletService {
       if (claimed.count !== 1) throw new BadRequestException('Transaction is already being processed');
       await this.lockBalance(tx, transaction.userId, transaction.currency);
       if (transaction.type === TransactionType.WITHDRAWAL) await this.assertSufficientBalance(tx, transaction.userId, transaction.currency, transaction.amountKobo);
-      const entryResult = this.postingEngine.buildEntry({ idempotencyKey: `wallet:${transaction.idempotencyKey}`, lines: transaction.type === TransactionType.DEPOSIT ? [
-        { accountId: INVESTOR_CASH_ACCOUNT_ID, direction: 'DEBIT', amountKobo: transaction.amountKobo, metadata: { investorId: transaction.userId, transactionType: 'DEPOSIT', reference: transaction.reference } },
-        { accountId: CUSTOMER_DEPOSITS_ACCOUNT_ID, direction: 'CREDIT', amountKobo: transaction.amountKobo, metadata: { investorId: transaction.userId, transactionType: 'DEPOSIT', reference: transaction.reference } },
-      ] : [
-        { accountId: CUSTOMER_DEPOSITS_ACCOUNT_ID, direction: 'DEBIT', amountKobo: transaction.amountKobo, metadata: { investorId: transaction.userId, transactionType: 'WITHDRAWAL', reference: transaction.reference } },
-        { accountId: INVESTOR_CASH_ACCOUNT_ID, direction: 'CREDIT', amountKobo: transaction.amountKobo, metadata: { investorId: transaction.userId, transactionType: 'WITHDRAWAL', reference: transaction.reference } },
-      ] });
+      const entryResult = this.postingEngine.buildEntry({ idempotencyKey: `wallet:${transaction.idempotencyKey}`, lines: transaction.type === TransactionType.DEPOSIT ? [{ accountId: INVESTOR_CASH_ACCOUNT_ID, direction: 'DEBIT', amountKobo: transaction.amountKobo, metadata: { investorId: transaction.userId, transactionType: 'DEPOSIT', reference: transaction.reference } }, { accountId: CUSTOMER_DEPOSITS_ACCOUNT_ID, direction: 'CREDIT', amountKobo: transaction.amountKobo, metadata: { investorId: transaction.userId, transactionType: 'DEPOSIT', reference: transaction.reference } }] : [{ accountId: CUSTOMER_DEPOSITS_ACCOUNT_ID, direction: 'DEBIT', amountKobo: transaction.amountKobo, metadata: { investorId: transaction.userId, transactionType: 'WITHDRAWAL', reference: transaction.reference } }, { accountId: INVESTOR_CASH_ACCOUNT_ID, direction: 'CREDIT', amountKobo: transaction.amountKobo, metadata: { investorId: transaction.userId, transactionType: 'WITHDRAWAL', reference: transaction.reference } }] });
       if (!entryResult.ok) throw new BadRequestException(entryResult.error.message);
       const journalEntry = await tx.journalEntry.create({ data: { id: entryResult.value.id, idempotencyKey: entryResult.value.idempotencyKey, reference: transaction.reference, description: `${transaction.type === TransactionType.DEPOSIT ? 'Deposit' : 'Withdrawal'} ${transaction.reference}`, currency: transaction.currency, status: EntryStatus.POSTED, postedAt: entryResult.value.postedAt, createdAt: entryResult.value.createdAt, createdByUserId: adminUserId, metadata: { transactionId: transaction.id, confirmedByUserId: adminUserId }, lines: { create: entryResult.value.lines.map((line) => ({ id: line.id, accountId: line.accountId, currency: transaction.currency, direction: line.direction, amountKobo: line.amountKobo, metadata: line.metadata, createdAt: line.createdAt })) } } });
       const updated = await tx.transaction.update({ where: { id: transaction.id }, data: { status: TransactionStatus.COMPLETED, journalEntryId: journalEntry.id, completedAt: new Date(), metadata: { workflow: transaction.type === TransactionType.DEPOSIT ? 'customer_deposit' : 'customer_withdrawal', confirmedByUserId: adminUserId } } });
@@ -98,7 +84,7 @@ export class WalletService {
 
   private async requireOperator(userId: string) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
-    if (!user || !user.isActive || ![UserRole.SUPER_ADMIN, UserRole.COMPLIANCE_OFFICER].includes(user.role)) throw new ForbiddenException('Only an active admin or compliance user can perform wallet approvals');
+    if (!user || !user.isActive || ![UserRole.SUPER_ADMIN, UserRole.COMPLIANCE_OFFICER].includes(user.role as UserRole)) throw new ForbiddenException('Only an active admin or compliance user can perform wallet approvals');
     return user;
   }
   private async lockBalance(tx: WalletTransactionClient, userId: string, currency: string) { await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`transfer:${userId}:${currency}`}, 0))::text`; }
@@ -113,10 +99,6 @@ export class WalletService {
     if (!user || !user.isActive) throw new NotFoundException('Investor not found');
     if (user.role !== UserRole.INVESTOR) throw new ForbiddenException('Only investors can create wallet requests');
   }
-  private normalizeCurrency(currency?: string): string {
-    const normalized = currency?.trim().toUpperCase();
-    if (normalized === undefined || !/^[A-Z]{3}$/.test(normalized)) throw new BadRequestException('INVALID_CURRENCY');
-    return normalized;
-  }
+  private normalizeCurrency(currency?: string): string { const normalized = currency?.trim().toUpperCase(); if (normalized === undefined || !/^[A-Z]{3}$/.test(normalized)) throw new BadRequestException('INVALID_CURRENCY'); return normalized; }
   private parseAmountKobo(value: string): bigint { if (!/^\d+$/.test(value)) throw new BadRequestException('amountKobo must be a positive integer string'); const amount = BigInt(value); if (amount <= 0n) throw new BadRequestException('amountKobo must be greater than 0'); return amount; }
 }
