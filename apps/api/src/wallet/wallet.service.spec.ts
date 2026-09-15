@@ -2,7 +2,7 @@ import { WalletService } from './wallet.service';
 
 describe('WalletService', () => {
   const transaction = jest.fn();
-  const audit = { append: jest.fn().mockResolvedValue(undefined) };
+  const audit = { append: jest.fn().mockResolvedValue(undefined), appendInTransaction: jest.fn().mockResolvedValue(undefined) };
   const txUpdateMany = jest.fn().mockResolvedValue({ count: 1 });
   const txUpdate = jest.fn().mockResolvedValue({ id: 'tx-1', status: 'COMPLETED' });
   const txQueryRaw = jest.fn().mockResolvedValue([]);
@@ -17,6 +17,7 @@ describe('WalletService', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     audit.append.mockResolvedValue(undefined);
+    audit.appendInTransaction.mockResolvedValue(undefined);
     txUpdateMany.mockResolvedValue({ count: 1 });
     txUpdate.mockResolvedValue({ id: 'tx-1', status: 'COMPLETED' });
     txQueryRaw.mockResolvedValue([]);
@@ -78,7 +79,8 @@ describe('WalletService', () => {
     expect(txQueryRaw.mock.calls[0][0]).toEqual(expect.objectContaining({ strings: expect.any(Array) }));
     expect(prisma.journalEntry.create).toHaveBeenCalledTimes(1);
     expect(prisma.journalEntry.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ idempotencyKey: 'wallet:dep-1', currency: 'USD', createdByUserId: 'admin-1' }) }));
-    expect(audit.append).toHaveBeenCalledTimes(1);
+    expect(audit.appendInTransaction).toHaveBeenCalledTimes(1);
+    expect(audit.append).not.toHaveBeenCalled();
   });
 
   it('locks before checking a withdrawal balance and posts with the same transaction lock', async () => {
@@ -112,7 +114,7 @@ describe('WalletService', () => {
     const result = await service().confirmRequest('tx-1', 'admin-1');
     expect(result).toBe(completed);
     expect(prisma.journalEntry.create).not.toHaveBeenCalled();
-    expect(audit.append).not.toHaveBeenCalled();
+    expect(audit.appendInTransaction).not.toHaveBeenCalled();
   });
 
   it('rejects a pending request without creating a journal entry and audits the rejection', async () => {
@@ -123,7 +125,8 @@ describe('WalletService', () => {
     const result = await service().rejectRequest('tx-2', 'admin-1', ' KYC mismatch ');
     expect(result.status).toBe('CANCELLED');
     expect(txUpdateMany).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'tx-2', status: 'PENDING' } }));
-    expect(audit.append).toHaveBeenCalledTimes(1);
+    expect(audit.appendInTransaction).toHaveBeenCalledTimes(1);
+    expect(audit.append).not.toHaveBeenCalled();
   });
 
   it('does not duplicate rejection audit when an already-cancelled request is rejected again', async () => {
@@ -133,7 +136,7 @@ describe('WalletService', () => {
     const result = await service().rejectRequest('tx-2', 'admin-1', 'duplicate');
     expect(result).toBe(cancelled);
     expect(txUpdateMany).not.toHaveBeenCalled();
-    expect(audit.append).not.toHaveBeenCalled();
+    expect(audit.appendInTransaction).not.toHaveBeenCalled();
   });
 
   it('rejects a withdrawal confirmation when posted customer balance is insufficient', async () => {
@@ -142,7 +145,7 @@ describe('WalletService', () => {
     prisma.journalLine.findMany.mockResolvedValue([{ direction: 'CREDIT', amountKobo: 100000n }]);
     await expect(service().confirmRequest('tx-2', 'admin-1')).rejects.toThrow('Insufficient available balance');
     expect(prisma.journalEntry.create).not.toHaveBeenCalled();
-    expect(audit.append).not.toHaveBeenCalled();
+    expect(audit.appendInTransaction).not.toHaveBeenCalled();
   });
 
   it('rejects wallet approval by a normal user', async () => {
