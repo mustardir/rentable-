@@ -162,4 +162,28 @@ describePrisma('Fortress Ledger Currency Isolation (PostgreSQL)', () => {
     expect(usdBalance.balanceKobo).not.toBe('35000');
     expect(eurBalance.balanceKobo).not.toBe('35000');
   });
+
+  it('allows different currencies but rejects duplicate active ledger mappings for the same user and currency', async () => {
+    const user = await prisma.user.create({
+      data: {
+        email: `${prefix}-mapping@example.com`,
+        passwordHash: 'test-hash',
+      },
+    });
+
+    const usdMapping = await prisma.userLedgerAccount.create({
+      data: { userId: user.id, accountId: ACCOUNT_A, currency: 'USD' },
+    });
+
+    const eurMapping = await prisma.userLedgerAccount.create({
+      data: { userId: user.id, accountId: ACCOUNT_A, currency: 'EUR' },
+    });
+
+    expect(usdMapping.currency).toBe('USD');
+    expect(eurMapping.currency).toBe('EUR');
+
+    await expect(prisma.userLedgerAccount.create({
+      data: { userId: user.id, accountId: ACCOUNT_A, currency: 'USD' },
+    })).rejects.toMatchObject({ code: 'P2002' });
+  });
 });
