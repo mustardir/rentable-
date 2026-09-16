@@ -15,6 +15,9 @@ const describePrisma = DATABASE_URL ? describe : describe.skip;
 const CUSTOMER_DEPOSITS_ACCOUNT_ID = 'acct_2100';
 const INVESTOR_CASH_ACCOUNT_ID = 'acct_1100';
 
+// Test-only currency used by the immutability suite.
+const TEST_CURRENCY = 'NGN';
+
 describePrisma('Fortress Ledger Immutability (PostgreSQL Triggers)', () => {
   const prefix = `ledger-immutable-${Date.now()}-${process.pid}`;
 
@@ -194,11 +197,28 @@ describePrisma('Fortress Ledger Immutability (PostgreSQL Triggers)', () => {
             idempotencyKey: `${prefix}-rollback-related-idem`,
             reference: `${prefix}-rollback-related-ref`,
             description: 'Related entry',
-            currency: 'NGN',
+            currency: TEST_CURRENCY,
             status: EntryStatus.POSTED,
             postedAt: new Date(),
             createdAt: new Date(),
-            lines: { create: [{ id: `${prefix}-rollback-line-1`, accountId: INVESTOR_CASH_ACCOUNT_ID, direction: Direction.DEBIT, amountKobo: 10000n }] },
+            lines: {
+              create: [
+                {
+                  id: `${prefix}-rollback-line-1`,
+                  accountId: INVESTOR_CASH_ACCOUNT_ID,
+                  direction: Direction.DEBIT,
+                  amountKobo: 10000n,
+                  currency: TEST_CURRENCY,
+                },
+                {
+                  id: `${prefix}-rollback-line-2`,
+                  accountId: CUSTOMER_DEPOSITS_ACCOUNT_ID,
+                  direction: Direction.CREDIT,
+                  amountKobo: 10000n,
+                  currency: TEST_CURRENCY,
+                },
+              ],
+            },
           },
           include: { lines: true },
         });
@@ -221,14 +241,14 @@ async function createPostEntry(idempotencyKey: string, reversalOfId?: string): P
       idempotencyKey,
       reference: `REF-${idempotencyKey}`,
       description: `Test entry ${idempotencyKey}`,
-      currency: 'NGN',
+      currency: TEST_CURRENCY,
       status: EntryStatus.POSTED,
       postedAt: new Date(),
       reversalOfId,
       lines: {
         create: [
-          { accountId: INVESTOR_CASH_ACCOUNT_ID, direction: Direction.DEBIT, amountKobo: 100000n },
-          { accountId: CUSTOMER_DEPOSITS_ACCOUNT_ID, direction: Direction.CREDIT, amountKobo: 100000n },
+          { accountId: INVESTOR_CASH_ACCOUNT_ID, direction: Direction.DEBIT, amountKobo: 100000n, currency: TEST_CURRENCY },
+          { accountId: CUSTOMER_DEPOSITS_ACCOUNT_ID, direction: Direction.CREDIT, amountKobo: 100000n, currency: TEST_CURRENCY },
         ],
       },
     },
@@ -243,13 +263,13 @@ async function createLineInPostEntry(idempotencyKey: string): Promise<string> {
       idempotencyKey,
       reference: `REF-${idempotencyKey}`,
       description: `Test entry ${idempotencyKey}`,
-      currency: 'NGN',
+      currency: TEST_CURRENCY,
       status: EntryStatus.POSTED,
       postedAt: new Date(),
       lines: {
         create: [
-          { accountId: INVESTOR_CASH_ACCOUNT_ID, direction: Direction.DEBIT, amountKobo: 50000n },
-          { accountId: CUSTOMER_DEPOSITS_ACCOUNT_ID, direction: Direction.CREDIT, amountKobo: 50000n },
+          { accountId: INVESTOR_CASH_ACCOUNT_ID, direction: Direction.DEBIT, amountKobo: 50000n, currency: TEST_CURRENCY },
+          { accountId: CUSTOMER_DEPOSITS_ACCOUNT_ID, direction: Direction.CREDIT, amountKobo: 50000n, currency: TEST_CURRENCY },
         ],
       },
     },
