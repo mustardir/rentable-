@@ -1,4 +1,5 @@
 import { PrismaClient, EntryStatus, Direction, AccountType } from '@prisma/client';
+import { LedgerService } from '../src/ledger/ledger.service';
 
 const prisma = new PrismaClient();
 const DATABASE_URL = process.env.DATABASE_URL;
@@ -101,5 +102,64 @@ describePrisma('Fortress Ledger Currency Isolation (PostgreSQL)', () => {
         },
       },
     })).rejects.toThrow('JOURNAL_REVERSAL_CURRENCY_MISMATCH');
+  });
+
+  it('isolates investor balances by currency and never aggregates USD with EUR', async () => {
+    const user = await prisma.user.create({
+      data: {
+        email: `${prefix}@example.com`,
+        passwordHash: 'test-hash',
+      },
+    });
+
+    await prisma.userLedgerAccount.createMany({
+      data: [
+        { userId: user.id, accountId: ACCOUNT_A, currency: 'USD' },
+        { userId: user.id, accountId: ACCOUNT_A, currency: 'EUR' },
+      ],
+    });
+
+    await prisma.journalEntry.create({
+      data: {
+        idempotencyKey: `${prefix}-balance-usd`,
+        reference: `${prefix}-balance-usd-ref`,
+        description: 'Investor USD balance',
+        currency: 'USD',
+        status: EntryStatus.POSTED,
+        postedAt: new Date(),
+        lines: {
+          create: [
+            { accountId: ACCOUNT_A, currency: 'USD', direction: Direction.DEBIT, amountKobo: 10000n, metadata: { investorId: user.id } },
+            { accountId: ACCOUNT_B, currency: 'USD', direction: Direction.CREDIT, amountKobo: 10000n },
+          ],
+        },
+      },
+    });
+
+    await prisma.journalEntry.create({
+      data: {
+        idempotencyKey: `${prefix}-balance-eur`,
+        reference: `${prefix}-balance-eur-ref`,
+        description: 'Investor EUR balance',
+        currency: 'EUR',
+        status: EntryStatus.POSTED,
+        postedAt: new Date(),
+        lines: {
+          create: [
+            { accountId: ACCOUNT_A, currency: 'EUR', direction: Direction.DEBIT, amountKobo: 25000n, metadata: { investorId: user.id } },
+            { accountId: ACCOUNT_B, currency: 'EUR', direction: Direction.CREDIT, amountKobo: 25000n },
+          ],
+        },
+      },
+    });
+
+    const service = new LedgerService(prisma as never);
+    const usdBalance = await service.getMyBalance(user.id, 'usd');
+    const eurBalance = await service.getMyBalance(user.id, 'EUR');
+
+    expect(usdBalance).toEqual({ accountId: ACCOUNT_A, currency: 'USD', balanceKobo: '10000' });
+    expect(eurBalance).toEqual({ accountId: ACCOUNT_A, currency: 'EUR', balanceKobo: '25000' });
+    expect(usdBalance.balanceKobo).not.toBe('35000');
+    expect(eurBalance.balanceKobo).not.toBe('35000');
   });
 });
