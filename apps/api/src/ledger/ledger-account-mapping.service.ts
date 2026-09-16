@@ -25,7 +25,8 @@ export class LedgerAccountMappingService {
       throw new ForbiddenException('PROVISIONING_ACTOR_NOT_AUTHORIZED');
     }
 
-    if (![UserRole.SUPER_ADMIN, UserRole.COMPLIANCE_OFFICER].includes(actor.role)) {
+    const allowedRoles: UserRole[] = [UserRole.SUPER_ADMIN, UserRole.COMPLIANCE_OFFICER];
+    if (!allowedRoles.includes(actor.role)) {
       throw new ForbiddenException('PROVISIONING_ACTOR_NOT_AUTHORIZED');
     }
 
