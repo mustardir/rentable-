@@ -25,27 +25,11 @@ describe('LedgerAccountMappingService', () => {
       .mockResolvedValueOnce({ id: 'admin-1', isActive: true, role: UserRole.SUPER_ADMIN })
       .mockResolvedValueOnce({ id: 'investor-1', isActive: true, role: UserRole.INVESTOR });
     prisma.account.findUnique.mockResolvedValue({ id: 'acct-1100', isActive: true });
-    prisma.userLedgerAccount.create.mockResolvedValue({
-      id: 'mapping-1',
-      userId: 'investor-1',
-      accountId: 'acct-1100',
-      currency: 'USD',
-      isActive: true,
-    });
+    prisma.userLedgerAccount.create.mockResolvedValue({ id: 'mapping-1', currency: 'USD', isActive: true });
 
-    await expect(service.provision(validInput)).resolves.toMatchObject({
-      id: 'mapping-1',
-      currency: 'USD',
-      isActive: true,
-    });
-
+    await expect(service.provision(validInput)).resolves.toMatchObject({ id: 'mapping-1', currency: 'USD', isActive: true });
     expect(prisma.userLedgerAccount.create).toHaveBeenCalledWith({
-      data: {
-        userId: 'investor-1',
-        accountId: 'acct-1100',
-        currency: 'USD',
-        isActive: true,
-      },
+      data: { userId: 'investor-1', accountId: 'acct-1100', currency: 'USD', isActive: true },
     });
   });
 
@@ -57,21 +41,18 @@ describe('LedgerAccountMappingService', () => {
     prisma.userLedgerAccount.create.mockResolvedValue({ id: 'mapping-1', currency: 'EUR' });
 
     await expect(service.provision({ ...validInput, actorId: 'compliance-1', currency: ' eur ' })).resolves.toMatchObject({
-      id: 'mapping-1',
-      currency: 'EUR',
+      id: 'mapping-1', currency: 'EUR',
     });
   });
 
   it('rejects an unauthorized provisioning actor', async () => {
     prisma.user.findUnique.mockResolvedValue({ id: 'investor-1', isActive: true, role: UserRole.INVESTOR });
-
     await expect(service.provision(validInput)).rejects.toBeInstanceOf(ForbiddenException);
     expect(prisma.userLedgerAccount.create).not.toHaveBeenCalled();
   });
 
   it('rejects an inactive provisioning actor', async () => {
     prisma.user.findUnique.mockResolvedValue({ id: 'admin-1', isActive: false, role: UserRole.SUPER_ADMIN });
-
     await expect(service.provision(validInput)).rejects.toBeInstanceOf(ForbiddenException);
     expect(prisma.userLedgerAccount.create).not.toHaveBeenCalled();
   });
@@ -80,7 +61,6 @@ describe('LedgerAccountMappingService', () => {
     prisma.user.findUnique
       .mockResolvedValueOnce({ id: 'admin-1', isActive: true, role: UserRole.SUPER_ADMIN })
       .mockResolvedValueOnce(null);
-
     await expect(service.provision(validInput)).rejects.toBeInstanceOf(NotFoundException);
     expect(prisma.userLedgerAccount.create).not.toHaveBeenCalled();
   });
@@ -89,7 +69,6 @@ describe('LedgerAccountMappingService', () => {
     prisma.user.findUnique
       .mockResolvedValueOnce({ id: 'admin-1', isActive: true, role: UserRole.SUPER_ADMIN })
       .mockResolvedValueOnce({ id: 'manager-1', isActive: true, role: UserRole.PORTFOLIO_MANAGER });
-
     await expect(service.provision({ ...validInput, userId: 'manager-1' })).rejects.toBeInstanceOf(BadRequestException);
     expect(prisma.userLedgerAccount.create).not.toHaveBeenCalled();
   });
@@ -99,7 +78,6 @@ describe('LedgerAccountMappingService', () => {
       .mockResolvedValueOnce({ id: 'admin-1', isActive: true, role: UserRole.SUPER_ADMIN })
       .mockResolvedValueOnce({ id: 'investor-1', isActive: true, role: UserRole.INVESTOR });
     prisma.account.findUnique.mockResolvedValue(null);
-
     await expect(service.provision(validInput)).rejects.toBeInstanceOf(NotFoundException);
     expect(prisma.userLedgerAccount.create).not.toHaveBeenCalled();
   });
@@ -115,14 +93,13 @@ describe('LedgerAccountMappingService', () => {
       .mockResolvedValueOnce({ id: 'admin-1', isActive: true, role: UserRole.SUPER_ADMIN })
       .mockResolvedValueOnce({ id: 'investor-1', isActive: true, role: UserRole.INVESTOR });
     prisma.account.findUnique.mockResolvedValue({ id: 'acct-1100', isActive: true });
-    prisma.userLedgerAccount.create.mockRejectedValue(
-      new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
-        code: 'P2002',
-        clientVersion: '5.0.0',
-      }),
-    );
+    prisma.userLedgerAccount.create.mockRejectedValue(new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
+      code: 'P2002', clientVersion: '5.0.0',
+    }));
 
-    await expect(service.provision(validInput)).rejects.toBeInstanceOf(ConflictException);
-    await expect(service.provision(validInput)).rejects.toMatchObject({ message: 'LEDGER_MAPPING_ALREADY_EXISTS' });
+    await expect(service.provision(validInput)).rejects.toMatchObject({
+      constructor: ConflictException,
+      message: 'LEDGER_MAPPING_ALREADY_EXISTS',
+    });
   });
 });
