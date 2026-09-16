@@ -54,6 +54,34 @@ describe('WalletService', () => {
     expect(prisma.journalEntry.create).not.toHaveBeenCalled();
   });
 
+  it('accepts EUR as an explicit currency', async () => {
+    prisma.user.findUnique.mockResolvedValue({ id: 'user-a', isActive: true });
+    prisma.transaction.findUnique.mockResolvedValue(null);
+    prisma.transaction.create.mockResolvedValue({ id: 'tx-eur', status: 'PENDING', currency: 'EUR' });
+
+    await service().createDepositRequest('user-a', {
+      amountKobo: '125000', idempotencyKey: 'dep-eur-1', currency: 'EUR',
+    });
+
+    expect(prisma.transaction.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ currency: 'EUR' }),
+    }));
+  });
+
+  it('trims and normalizes lowercase currency codes to uppercase', async () => {
+    prisma.user.findUnique.mockResolvedValue({ id: 'user-a', isActive: true });
+    prisma.transaction.findUnique.mockResolvedValue(null);
+    prisma.transaction.create.mockResolvedValue({ id: 'tx-gbp', status: 'PENDING', currency: 'GBP' });
+
+    await service().createWithdrawalRequest('user-a', {
+      amountKobo: '50000', idempotencyKey: 'wdr-gbp-1', currency: '  gbp  ',
+    });
+
+    expect(prisma.transaction.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ currency: 'GBP' }),
+    }));
+  });
+
   it('rejects wallet requests without an explicit currency', async () => {
     prisma.user.findUnique.mockResolvedValue({ id: 'user-a', isActive: true });
     await expect(service().createDepositRequest('user-a', { amountKobo: '1000', idempotencyKey: 'dep-missing-currency' })).rejects.toThrow('INVALID_CURRENCY');
@@ -63,6 +91,7 @@ describe('WalletService', () => {
   it('rejects invalid currency codes', async () => {
     prisma.user.findUnique.mockResolvedValue({ id: 'user-a', isActive: true });
     await expect(service().createWithdrawalRequest('user-a', { amountKobo: '1000', idempotencyKey: 'wdr-invalid-currency', currency: 'US' })).rejects.toThrow('INVALID_CURRENCY');
+    await expect(service().createWithdrawalRequest('user-a', { amountKobo: '1000', idempotencyKey: 'wdr-invalid-currency-long', currency: 'USDX' })).rejects.toThrow('INVALID_CURRENCY');
     expect(prisma.transaction.create).not.toHaveBeenCalled();
   });
 
