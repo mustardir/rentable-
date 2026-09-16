@@ -75,3 +75,4 @@ docker compose up -d --build
 - Subsequent milestones will implement backend auth/ledger services and frontend fintech product experiences.
 - CI trigger verification checkpoint for the reversal-balance test branch.
 - API CI verification checkpoint after Prisma schema reconciliation.
+- CI trigger verification checkpoint for ledger currency-isolation integration coverage.
