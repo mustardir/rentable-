@@ -206,7 +206,7 @@ model UserLedgerAccount {
   id          String   @id @default(cuid())
   userId      String
   accountId   String
-  currency    String   @default("NGN")
+  currency    String
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -238,7 +238,7 @@ model JournalEntry {
   transfers       Transfer[]
   createdByUser   User?         @relation("JournalEntryCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
   reversalOf      JournalEntry? @relation("EntryReversal", fields: [reversalOfId], references: [id], onDelete: Restrict)
-  reversals       JournalEntry[] @relation("EntryReversal")
+  reversals        JournalEntry[] @relation("EntryReversal")
   reversedBy      JournalEntry? @relation("EntryReversedBy", fields: [reversedById], references: [id], onDelete: Restrict)
   reversedEntries JournalEntry[] @relation("EntryReversedBy")
 
@@ -251,7 +251,7 @@ model JournalLine {
   id             String     @id @default(cuid())
   journalEntryId String
   accountId      String
-  currency       String     @default("NGN")
+  currency       String
   direction      Direction
   amountKobo     BigInt
   description    String?
@@ -272,7 +272,7 @@ model Transaction {
   type           TransactionType
   status         TransactionStatus @default(PENDING)
   amountKobo     BigInt
-  currency       String            @default("NGN")
+  currency       String
   reference      String            @unique
   idempotencyKey String            @unique
   journalEntryId String?
@@ -296,13 +296,13 @@ model Transfer {
   destinationUserId  String
   status             TransferStatus @default(PENDING)
   amountKobo         BigInt
-  currency           String         @default("NGN")
+  currency           String
   reference          String         @unique
   journalEntryId     String?
   failureReason      String?
   metadata           Json?
-  createdAt          DateTime       @default(now())
-  updatedAt          DateTime       @updatedAt
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
   completedAt        DateTime?
 
   sourceUser         User          @relation("TransferSourceUser", fields: [sourceUserId], references: [id], onDelete: Restrict)
