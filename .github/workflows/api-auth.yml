@@ -94,6 +94,9 @@ jobs:
       - name: Run ledger account mapping provisioning integration test
         run: pnpm --filter @fortress-fund/api test -- --runInBand test/ledger-account-mapping.integration.spec.ts
 
+      - name: Run authenticated ledger mapping HTTP integration test
+        run: pnpm --filter @fortress-fund/api test -- --runInBand test/ledger-account-mapping.http.integration.spec.ts
+
       - name: Run ledger mapping controller authorization tests
         run: pnpm --filter @fortress-fund/api test -- --runInBand src/ledger/ledger.controller.spec.ts
 
