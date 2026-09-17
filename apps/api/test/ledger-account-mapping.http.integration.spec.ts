@@ -1,9 +1,8 @@
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
-import { AccountType, Direction, PrismaClient, UserRole } from '@prisma/client';
+import { AccountType, Direction, UserRole } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import request from 'supertest';
-import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 
 describe('Ledger account mapping HTTP integration', () => {
@@ -47,6 +46,8 @@ describe('Ledger account mapping HTTP integration', () => {
 
     process.env.JWT_SECRET = process.env.JWT_SECRET || 'integration-test-access-secret';
     process.env.JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'integration-test-refresh-secret';
+
+    const { AppModule } = await import('../src/app.module');
 
     const moduleRef = await Test.createTestingModule({
       imports: [AppModule],
@@ -211,7 +212,3 @@ describe('Ledger account mapping HTTP integration', () => {
       .expect(400);
   });
 });
-
-// Keep PrismaClient referenced so the integration test fails fast at compile time if the
-// generated client is unavailable after migrations/client generation.
-void PrismaClient;
