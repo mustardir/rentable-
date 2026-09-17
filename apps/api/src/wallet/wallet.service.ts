@@ -59,7 +59,7 @@ export class WalletService {
     return this.prisma.$transaction(async (tx) => {
       const transaction = await tx.transaction.findUnique({ where: { id: transactionId } });
       if (!transaction) throw new NotFoundException('Wallet transaction not found');
-      if (transaction.status === TransactionStatus.COMPLETED) return transaction;
+      if (transaction.status === TransactionStatus.COMPLETED) throw new BadRequestException('Transaction is already being processed');
       if (transaction.status !== TransactionStatus.PENDING) throw new BadRequestException(`Transaction cannot be confirmed from status ${transaction.status}`);
       const claimed = await tx.transaction.updateMany({ where: { id: transaction.id, status: TransactionStatus.PENDING }, data: { status: TransactionStatus.PROCESSING } });
       if (claimed.count !== 1) throw new BadRequestException('Transaction is already being processed');
@@ -80,7 +80,7 @@ export class WalletService {
     return this.prisma.$transaction(async (tx) => {
       const transaction = await tx.transaction.findUnique({ where: { id: transactionId } });
       if (!transaction) throw new NotFoundException('Wallet transaction not found');
-      if (transaction.status === TransactionStatus.CANCELLED) return transaction;
+      if (transaction.status === TransactionStatus.CANCELLED) throw new BadRequestException('Transaction is already being processed');
       if (transaction.status !== TransactionStatus.PENDING) throw new BadRequestException(`Transaction cannot be rejected from status ${transaction.status}`);
       const updated = await tx.transaction.updateMany({ where: { id: transaction.id, status: TransactionStatus.PENDING }, data: { status: TransactionStatus.CANCELLED, metadata: { workflow: transaction.type === TransactionType.DEPOSIT ? 'customer_deposit' : 'customer_withdrawal', rejectedByUserId: adminUserId, rejectionReason: normalizedReason } } });
       if (updated.count !== 1) throw new BadRequestException('Transaction is already being processed');
