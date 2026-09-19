@@ -55,3 +55,103 @@ describe('InvestmentSubscriptionService', () => {
     expect(repository.create).toHaveBeenCalled();
   });
 });
+
+describe('InvestmentSubscriptionService.fund', () => {
+  function prismaMock() {
+    const subscription = {
+      id: 'subscription-1',
+      userId: 'user-1',
+      productId: 'product-1',
+      amountMinor: 5000n,
+      currency: 'USD',
+      status: 'PENDING',
+      idempotencyKey: 'key-fund-1',
+      reference: 'INV-key-fund-1',
+      product: { id: 'product-1', status: 'ACTIVE' },
+    };
+    const tx = {
+      investmentSubscription: {
+        findUnique: jest.fn().mockResolvedValue(subscription),
+        update: jest.fn().mockResolvedValue({ ...subscription, status: 'COMPLETED', journalEntryId: 'je_subscription-1', transactionId: 'tx-1' }),
+      },
+      journalLine: {
+        findMany: jest.fn().mockResolvedValue([
+          { direction: 'CREDIT', amountKobo: 10000n },
+        ]),
+      },
+      transaction: {
+        findUnique: jest.fn().mockResolvedValue(null),
+        create: jest.fn().mockResolvedValue({
+          id: 'tx-1',
+          userId: 'user-1',
+          type: 'INVESTMENT_PURCHASE',
+          status: 'PROCESSING',
+          amountKobo: 5000n,
+          currency: 'USD',
+          reference: 'INV-key-fund-1',
+          idempotencyKey: 'INVEST-FUND-key-fund-1',
+        }),
+        update: jest.fn().mockResolvedValue({}),
+      },
+      journalEntry: {
+        create: jest.fn().mockResolvedValue({ id: 'je_subscription-1' }),
+      },
+      $queryRaw: jest.fn().mockResolvedValue([]),
+    };
+    return { tx, prisma: { $transaction: jest.fn(async (callback: any) => callback(tx)) } };
+  }
+
+  it('rejects funding when available balance is insufficient', async () => {
+    const { prisma, tx } = prismaMock();
+    tx.journalLine.findMany.mockResolvedValue([{ direction: 'CREDIT', amountKobo: 4999n }]);
+
+    const service = new InvestmentSubscriptionService(
+      {} as never,
+      {} as never,
+      {} as never,
+      prisma as never,
+    );
+
+    await expect(service.fund('user-1', 'subscription-1'))
+      .rejects.toThrow('INSUFFICIENT_AVAILABLE_BALANCE');
+    expect(tx.transaction.create).not.toHaveBeenCalled();
+    expect(tx.journalEntry.create).not.toHaveBeenCalled();
+  });
+
+  it('atomically posts the investment journal and completes the subscription', async () => {
+    const { prisma, tx } = prismaMock();
+
+    const service = new InvestmentSubscriptionService(
+      {} as never,
+      {} as never,
+      {} as never,
+      prisma as never,
+    );
+
+    await expect(service.fund('user-1', 'subscription-1'))
+      .resolves.toMatchObject({ status: 'COMPLETED' });
+
+    expect(tx.$queryRaw).toHaveBeenCalled();
+    expect(tx.transaction.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        type: 'INVESTMENT_PURCHASE',
+        amountKobo: 5000n,
+        currency: 'USD',
+      }),
+    }));
+    expect(tx.journalEntry.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        status: 'POSTED',
+        currency: 'USD',
+        lines: expect.objectContaining({
+          create: expect.arrayContaining([
+            expect.objectContaining({ accountId: 'acct_2100', direction: 'DEBIT', amountKobo: 5000n }),
+            expect.objectContaining({ accountId: 'acct_2200', direction: 'CREDIT', amountKobo: 5000n }),
+          ]),
+        }),
+      }),
+    }));
+    expect(tx.transaction.update).toHaveBeenCalled();
+    expect(tx.investmentSubscription.update).toHaveBeenCalled();
+  });
+});
