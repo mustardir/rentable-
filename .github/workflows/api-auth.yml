@@ -58,6 +58,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install --no-frozen-lockfile
 
+      - name: Verify Nest platform runtime resolution
+        run: |
+          pnpm --filter @fortress-fund/api exec node -p "require.resolve('@nestjs/platform-express')"
+          pnpm --filter @fortress-fund/api exec node -p "require('@nestjs/platform-express/package.json').version"
+
       - name: Generate Prisma client
         run: pnpm --filter @fortress-fund/api prisma:generate
 
