@@ -1,5 +1,6 @@
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
+import { ExpressAdapter } from '@nestjs/platform-express';
 import { AccountType, Direction, UserRole } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import request from 'supertest';
@@ -53,7 +54,7 @@ describe('Ledger account mapping HTTP integration', () => {
       imports: [AppModule],
     }).compile();
 
-    app = moduleRef.createNestApplication();
+    app = moduleRef.createNestApplication(new ExpressAdapter());
     app.setGlobalPrefix('api');
     app.useGlobalPipes(
       new ValidationPipe({
