@@ -236,6 +236,7 @@ model JournalEntry {
 
   lines           JournalLine[]
   transactions    Transaction[]
+  investmentSubscriptions InvestmentSubscription[]
   transfers       Transfer[]
   createdByUser   User?         @relation("JournalEntryCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
   reversalOf      JournalEntry? @relation("EntryReversal", fields: [reversalOfId], references: [id], onDelete: Restrict)
@@ -285,6 +286,7 @@ model Transaction {
 
   user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   journalEntry   JournalEntry? @relation(fields: [journalEntryId], references: [id], onDelete: SetNull)
+  investmentSubscription InvestmentSubscription?
 
   @@index([userId, status])
   @@index([createdAt])
@@ -344,6 +346,8 @@ model FinancialProduct {
 
   @@index([status, createdAt])
   @@index([currency, status])
+
+  subscriptions InvestmentSubscription[]
 }
 
 enum InvestmentSubscriptionStatus {
@@ -368,6 +372,8 @@ model InvestmentSubscription {
 
   user           User           @relation(fields: [userId], references: [id], onDelete: Restrict)
   product        FinancialProduct @relation(fields: [productId], references: [id], onDelete: Restrict)
+  journalEntry   JournalEntry?    @relation(fields: [journalEntryId], references: [id], onDelete: SetNull)
+  transaction    Transaction?     @relation(fields: [transactionId], references: [id], onDelete: SetNull)
 
   @@index([userId, createdAt])
   @@index([productId, status])
