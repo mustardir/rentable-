@@ -100,6 +100,7 @@ model User {
   kycRecords     KYCRecord[]
   ledgerAccounts UserLedgerAccount[]
   transactions   Transaction[]
+  investmentSubscriptions InvestmentSubscription[]
   auditLogs      AuditLog[]
   journalEntriesCreated JournalEntry[] @relation("JournalEntryCreator")
 
@@ -343,6 +344,34 @@ model FinancialProduct {
 
   @@index([status, createdAt])
   @@index([currency, status])
+}
+
+enum InvestmentSubscriptionStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+model InvestmentSubscription {
+  id             String                     @id @default(cuid())
+  userId         String
+  productId      String
+  amountMinor    BigInt
+  currency       String
+  status         InvestmentSubscriptionStatus @default(PENDING)
+  idempotencyKey String                     @unique
+  reference      String                     @unique
+  createdAt      DateTime                   @default(now())
+  updatedAt      DateTime                   @updatedAt
+
+  user           User           @relation(fields: [userId], references: [id], onDelete: Restrict)
+  product        FinancialProduct @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@index([userId, createdAt])
+  @@index([productId, status])
+  @@index([status, createdAt])
 }
 
 model AuditLog {
