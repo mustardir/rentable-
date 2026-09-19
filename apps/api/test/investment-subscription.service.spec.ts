@@ -12,6 +12,7 @@ describe('InvestmentSubscriptionService', () => {
       { findById: jest.fn().mockResolvedValue(product) } as never,
       { check: jest.fn() } as never,
       { findByIdempotencyKey: jest.fn() } as never,
+      {} as never,
     );
 
     await expect(service.create({
@@ -40,6 +41,7 @@ describe('InvestmentSubscriptionService', () => {
       { findById: jest.fn().mockResolvedValue(product) } as never,
       eligibility as never,
       repository as never,
+      {} as never,
     );
 
     await expect(service.create({
