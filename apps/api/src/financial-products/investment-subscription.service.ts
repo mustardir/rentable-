@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable } from '@nestjs/common';
 import { FinancialProductEligibilityService } from './financial-product-eligibility.service';
 import { FinancialProductService } from './financial-product.service';
 import type { InvestmentSubscriptionRepository } from './investment-subscription.repository';
@@ -9,6 +9,7 @@ export class InvestmentSubscriptionService {
   constructor(
     private readonly products: FinancialProductService,
     private readonly eligibility: FinancialProductEligibilityService,
+    @Inject('InvestmentSubscriptionRepository')
     private readonly repository: InvestmentSubscriptionRepository,
   ) {}
 
