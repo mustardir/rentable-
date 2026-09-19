@@ -64,7 +64,6 @@ export class InvestmentSubscriptionService {
       reference: input.reference,
     });
   }
-}
 
   async fund(userId: string, subscriptionId: string): Promise<InvestmentSubscription> {
     return this.prisma.$transaction(async (tx) => {
