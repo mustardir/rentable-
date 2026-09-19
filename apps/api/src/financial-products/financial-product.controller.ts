@@ -9,7 +9,7 @@ export class FinancialProductController {
 
   @Get()
   async listActive() {
-    return this.serialize(await this.service.listActive());
+    return (await this.service.listActive()).map((product) => this.serialize(product));
   }
 
   @Get(':id')
@@ -19,7 +19,9 @@ export class FinancialProductController {
     return this.serialize(product);
   }
 
-  private serialize<T extends { minimumAmountMinor: bigint }>(value: T): Omit<T, 'minimumAmountMinor'> & { minimumAmountMinor: string } {
+  private serialize<T extends { minimumAmountMinor: bigint }>(
+    value: T,
+  ): Omit<T, 'minimumAmountMinor'> & { minimumAmountMinor: string } {
     return {
       ...value,
       minimumAmountMinor: value.minimumAmountMinor.toString(),
