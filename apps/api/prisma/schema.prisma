@@ -367,6 +367,8 @@ model InvestmentSubscription {
   status         InvestmentSubscriptionStatus @default(PENDING)
   idempotencyKey String                     @unique
   reference      String                     @unique
+  journalEntryId  String?                    @unique
+  transactionId   String?                    @unique
   createdAt      DateTime                   @default(now())
   updatedAt      DateTime                   @updatedAt
 
