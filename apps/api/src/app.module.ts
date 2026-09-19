@@ -8,8 +8,20 @@ import { WalletModule } from './wallet/wallet.module';
 import { AuditModule } from './audit/audit.module';
 import { DocumentsModule } from './documents/documents.module';
 import { InvestorModule } from './investor/investor.module';
+import { FinancialProductModule } from './financial-products/financial-product.module';
 
 @Module({
-  imports: [PrismaModule, AuthModule, HealthModule, LedgerModule, TransfersModule, WalletModule, AuditModule, DocumentsModule, InvestorModule],
+  imports: [
+    PrismaModule,
+    AuthModule,
+    HealthModule,
+    LedgerModule,
+    TransfersModule,
+    WalletModule,
+    AuditModule,
+    DocumentsModule,
+    InvestorModule,
+    FinancialProductModule,
+  ],
 })
 export class AppModule {}
