@@ -9,6 +9,8 @@ CREATE TABLE "InvestmentSubscription" (
     "status" "InvestmentSubscriptionStatus" NOT NULL DEFAULT 'PENDING',
     "idempotencyKey" TEXT NOT NULL,
     "reference" TEXT NOT NULL,
+    "journalEntryId" TEXT,
+    "transactionId" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -17,12 +19,20 @@ CREATE TABLE "InvestmentSubscription" (
 
 CREATE UNIQUE INDEX "InvestmentSubscription_idempotencyKey_key" ON "InvestmentSubscription"("idempotencyKey");
 CREATE UNIQUE INDEX "InvestmentSubscription_reference_key" ON "InvestmentSubscription"("reference");
+CREATE UNIQUE INDEX "InvestmentSubscription_journalEntryId_key" ON "InvestmentSubscription"("journalEntryId");
+CREATE UNIQUE INDEX "InvestmentSubscription_transactionId_key" ON "InvestmentSubscription"("transactionId");
 CREATE INDEX "InvestmentSubscription_userId_createdAt_idx" ON "InvestmentSubscription"("userId", "createdAt");
 CREATE INDEX "InvestmentSubscription_productId_status_idx" ON "InvestmentSubscription"("productId", "status");
 CREATE INDEX "InvestmentSubscription_status_createdAt_idx" ON "InvestmentSubscription"("status", "createdAt");
 
 ALTER TABLE "InvestmentSubscription" ADD CONSTRAINT "InvestmentSubscription_userId_fkey"
   FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+ALTER TABLE "InvestmentSubscription" ADD CONSTRAINT "InvestmentSubscription_journalEntryId_fkey"
+  FOREIGN KEY ("journalEntryId") REFERENCES "JournalEntry"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+ALTER TABLE "InvestmentSubscription" ADD CONSTRAINT "InvestmentSubscription_transactionId_fkey"
+  FOREIGN KEY ("transactionId") REFERENCES "Transaction"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 ALTER TABLE "InvestmentSubscription" ADD CONSTRAINT "InvestmentSubscription_productId_fkey"
   FOREIGN KEY ("productId") REFERENCES "FinancialProduct"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
