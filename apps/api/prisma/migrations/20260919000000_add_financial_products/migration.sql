@@ -20,3 +20,6 @@ CREATE TABLE "FinancialProduct" (
 CREATE UNIQUE INDEX "FinancialProduct_code_key" ON "FinancialProduct"("code");
 CREATE INDEX "FinancialProduct_status_createdAt_idx" ON "FinancialProduct"("status", "createdAt");
 CREATE INDEX "FinancialProduct_currency_status_idx" ON "FinancialProduct"("currency", "status");
+
+INSERT INTO "FinancialProduct" ("id", "code", "name", "type", "currency", "minimumAmountMinor", "status", "metadata", "updatedAt")
+VALUES ('product_fort_invest_001', 'FORT-INVEST-001', 'Fortress Investment', 'INVESTMENT', 'USD', 5000, 'ACTIVE', '{"source":"migration","version":1}', CURRENT_TIMESTAMP);
