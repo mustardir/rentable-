@@ -314,6 +314,37 @@ model Transfer {
   @@index([status, createdAt])
 }
 
+enum ProductStatus {
+  DRAFT
+  ACTIVE
+  SUSPENDED
+  CLOSED
+}
+
+enum ProductType {
+  SAVINGS
+  INVESTMENT
+  FIXED_INCOME
+  OTHER
+}
+
+model FinancialProduct {
+  id                  String        @id @default(cuid())
+  code                String        @unique
+  name                String
+  type                ProductType
+  description         String?
+  currency            String
+  minimumAmountMinor  BigInt
+  status              ProductStatus @default(DRAFT)
+  metadata            Json?
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+
+  @@index([status, createdAt])
+  @@index([currency, status])
+}
+
 model AuditLog {
   id         String   @id @default(cuid())
   userId     String?
