@@ -5,12 +5,21 @@ import { PrismaFinancialProductRepository } from './prisma-financial-product.rep
 import { FinancialProductService } from './financial-product.service';
 import { FinancialProductEligibilityController } from './financial-product-eligibility.controller';
 import { FinancialProductEligibilityService } from './financial-product-eligibility.service';
+import { InvestmentSubscriptionController } from './investment-subscription.controller';
+import { InvestmentSubscriptionService } from './investment-subscription.service';
+import { PrismaInvestmentSubscriptionRepository } from './prisma-investment-subscription.repository';
 
 @Module({
-  controllers: [FinancialProductController, FinancialProductEligibilityController],
+  controllers: [FinancialProductController, FinancialProductEligibilityController, InvestmentSubscriptionController],
   providers: [
     FinancialProductService,
     FinancialProductEligibilityService,
+    InvestmentSubscriptionService,
+    PrismaInvestmentSubscriptionRepository,
+    {
+      provide: 'InvestmentSubscriptionRepository',
+      useExisting: PrismaInvestmentSubscriptionRepository,
+    },
     JwtAuthGuard,
     PrismaFinancialProductRepository,
     {
