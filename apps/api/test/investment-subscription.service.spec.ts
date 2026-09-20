@@ -13,6 +13,7 @@ describe('InvestmentSubscriptionService', () => {
       { check: jest.fn() } as never,
       { findByIdempotencyKey: jest.fn() } as never,
       {} as never,
+      {} as never,
     );
 
     await expect(service.create({
@@ -41,6 +42,7 @@ describe('InvestmentSubscriptionService', () => {
       { findById: jest.fn().mockResolvedValue(product) } as never,
       eligibility as never,
       repository as never,
+      {} as never,
       {} as never,
     );
 
@@ -72,7 +74,7 @@ describe('InvestmentSubscriptionService.fund', () => {
     const tx = {
       investmentSubscription: {
         findUnique: jest.fn().mockResolvedValue(subscription),
-        update: jest.fn().mockResolvedValue({ ...subscription, status: 'COMPLETED', journalEntryId: 'je_subscription-1', transactionId: 'tx-1' }),
+        update: jest.fn().mockResolvedValue({ ...subscription, status: 'COMPLETED', journalEntryId: 'journal-1', transactionId: 'tx-1' }),
       },
       journalLine: {
         findMany: jest.fn().mockResolvedValue([
@@ -93,9 +95,6 @@ describe('InvestmentSubscriptionService.fund', () => {
         }),
         update: jest.fn().mockResolvedValue({}),
       },
-      journalEntry: {
-        create: jest.fn().mockResolvedValue({ id: 'je_subscription-1' }),
-      },
       $queryRaw: jest.fn().mockResolvedValue([]),
     };
     return { tx, prisma: { $transaction: jest.fn(async (callback: any) => callback(tx)) } };
@@ -110,26 +109,30 @@ describe('InvestmentSubscriptionService.fund', () => {
       {} as never,
       {} as never,
       prisma as never,
+      {} as never,
     );
 
     await expect(service.fund('user-1', 'subscription-1'))
       .rejects.toThrow('INSUFFICIENT_AVAILABLE_BALANCE');
     expect(tx.transaction.create).not.toHaveBeenCalled();
-    expect(tx.journalEntry.create).not.toHaveBeenCalled();
   });
 
-  it('atomically posts the investment journal and completes the subscription', async () => {
+  it('posts through the canonical PostingEngine and keeps the journal in the same transaction', async () => {
     const { prisma, tx } = prismaMock();
+    const ledgerRepository = {
+      saveEntry: jest.fn(async (entry: any) => entry),
+    };
 
     const service = new InvestmentSubscriptionService(
       {} as never,
       {} as never,
       {} as never,
       prisma as never,
+      ledgerRepository as never,
     );
 
     await expect(service.fund('user-1', 'subscription-1'))
-      .resolves.toMatchObject({ status: 'COMPLETED' });
+      .resolves.toMatchObject({ status: 'COMPLETED', journalEntryId: expect.any(String), transactionId: 'tx-1' });
 
     expect(tx.$queryRaw).toHaveBeenCalled();
     expect(tx.transaction.create).toHaveBeenCalledWith(expect.objectContaining({
@@ -139,18 +142,18 @@ describe('InvestmentSubscriptionService.fund', () => {
         currency: 'USD',
       }),
     }));
-    expect(tx.journalEntry.create).toHaveBeenCalledWith(expect.objectContaining({
-      data: expect.objectContaining({
-        status: 'POSTED',
+    expect(ledgerRepository.saveEntry).toHaveBeenCalledWith(
+      expect.objectContaining({
+        idempotencyKey: 'INVEST-FUND-key-fund-1',
         currency: 'USD',
-        lines: expect.objectContaining({
-          create: expect.arrayContaining([
-            expect.objectContaining({ accountId: 'acct_2100', direction: 'DEBIT', amountKobo: 5000n }),
-            expect.objectContaining({ accountId: 'acct_2200', direction: 'CREDIT', amountKobo: 5000n }),
-          ]),
-        }),
+        status: 'POSTED',
+        lines: expect.arrayContaining([
+          expect.objectContaining({ accountId: 'acct_2100', direction: 'DEBIT', amountKobo: 5000n }),
+          expect.objectContaining({ accountId: 'acct_2200', direction: 'CREDIT', amountKobo: 5000n }),
+        ]),
       }),
-    }));
+      tx,
+    );
     expect(tx.transaction.update).toHaveBeenCalled();
     expect(tx.investmentSubscription.update).toHaveBeenCalled();
   });
