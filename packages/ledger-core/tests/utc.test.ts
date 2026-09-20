@@ -22,7 +22,7 @@ describe("UTC timestamps", () => {
 
   it("stores postedAt in UTC when no explicit date given", () => {
     const before = Date.now();
-    const result = engine.buildEntry({ idempotencyKey: "utc-1", lines: LINES });
+    const result = engine.buildEntry({ idempotencyKey: "utc-1", currency: "USD", lines: LINES });
     const after = Date.now();
 
     expect(result.ok).toBe(true);
@@ -39,6 +39,7 @@ describe("UTC timestamps", () => {
     const fixed = new Date("2024-06-01T00:00:00.000Z");
     const result = engine.buildEntry({
       idempotencyKey: "utc-2",
+      currency: "USD", currency: "USD",
       lines: LINES,
       postedAt: fixed,
     });
@@ -51,7 +52,7 @@ describe("UTC timestamps", () => {
   });
 
   it("createdAt is always set to a UTC date", () => {
-    const result = engine.buildEntry({ idempotencyKey: "utc-3", lines: LINES });
+    const result = engine.buildEntry({ idempotencyKey: "utc-3", currency: "USD", lines: LINES });
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.value.createdAt.toISOString()).toMatch(/Z$/);
@@ -66,7 +67,7 @@ describe("UTC timestamps", () => {
     const reversalSvc = new ReversalService();
 
     const postResult = await engine.post(
-      { idempotencyKey: "utc-rev-orig", lines: LINES },
+      { idempotencyKey: "utc-rev-orig", currency: "USD", lines: LINES },
       repo
     );
     expect(postResult.ok).toBe(true);
@@ -102,7 +103,7 @@ describe("UTC timestamps", () => {
       ["ts-c", t3],
     ] as [string, Date][]) {
       await engine.post(
-        { idempotencyKey: key, lines: LINES, postedAt: ts },
+        { idempotencyKey: key, currency: "USD", lines: LINES, postedAt: ts },
         repo
       );
     }
