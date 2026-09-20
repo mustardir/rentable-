@@ -34,7 +34,7 @@ export class LedgerController {
   }
 
   @Post('accounts/mappings')
-  provisionLedgerAccountMapping(
+  async provisionLedgerAccountMapping(
     @Req() req: AuthenticatedRequest,
     @Body() dto: ProvisionLedgerAccountDto,
   ) {
