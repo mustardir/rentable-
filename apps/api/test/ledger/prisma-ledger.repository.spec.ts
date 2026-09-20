@@ -20,6 +20,7 @@ describePrisma('PrismaLedgerRepository concurrent idempotency', () => {
     return {
       id,
       idempotencyKey: key,
+      currency: 'USD',
       status: 'POSTED',
       postedAt: now,
       createdAt: now,
