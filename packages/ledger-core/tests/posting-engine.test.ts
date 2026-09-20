@@ -20,6 +20,7 @@ describe("PostingEngine.buildEntry", () => {
   it("accepts a balanced two-line entry", () => {
     const result = engine.buildEntry({
       idempotencyKey: "test-1",
+      currency: "USD", currency: "USD",
       lines: [
         { accountId: "acct_1100", direction: "DEBIT", amountKobo: 100_000n },
         { accountId: "acct_2100", direction: "CREDIT", amountKobo: 100_000n },
@@ -35,6 +36,7 @@ describe("PostingEngine.buildEntry", () => {
   it("accepts a balanced four-line entry", () => {
     const result = engine.buildEntry({
       idempotencyKey: "test-4line",
+      currency: "USD", currency: "USD",
       lines: [
         { accountId: "acct_1100", direction: "DEBIT", amountKobo: 60_000n },
         { accountId: "acct_1200", direction: "DEBIT", amountKobo: 40_000n },
@@ -48,6 +50,7 @@ describe("PostingEngine.buildEntry", () => {
   it("rejects unbalanced entry (debits ≠ credits)", () => {
     const result = engine.buildEntry({
       idempotencyKey: "test-unbalanced",
+      currency: "USD", currency: "USD",
       lines: [
         { accountId: "acct_1100", direction: "DEBIT", amountKobo: 100_000n },
         { accountId: "acct_2100", direction: "CREDIT", amountKobo: 99_000n },
@@ -60,6 +63,7 @@ describe("PostingEngine.buildEntry", () => {
   it("rejects entry with only debits", () => {
     const result = engine.buildEntry({
       idempotencyKey: "test-only-debits",
+      currency: "USD", currency: "USD",
       lines: [
         { accountId: "acct_1100", direction: "DEBIT", amountKobo: 100_000n },
         { accountId: "acct_1200", direction: "DEBIT", amountKobo: 100_000n },
@@ -72,6 +76,7 @@ describe("PostingEngine.buildEntry", () => {
   it("rejects empty lines", () => {
     const result = engine.buildEntry({
       idempotencyKey: "test-empty",
+      currency: "USD", currency: "USD",
       lines: [],
     });
     expect(result.ok).toBe(false);
@@ -81,6 +86,7 @@ describe("PostingEngine.buildEntry", () => {
   it("rejects single line (no debit+credit pair)", () => {
     const result = engine.buildEntry({
       idempotencyKey: "test-single",
+      currency: "USD", currency: "USD",
       lines: [
         { accountId: "acct_1100", direction: "DEBIT", amountKobo: 100_000n },
       ],
@@ -92,6 +98,7 @@ describe("PostingEngine.buildEntry", () => {
   it("rejects float amountKobo (number)", () => {
     const result = engine.buildEntry({
       idempotencyKey: "test-float",
+      currency: "USD", currency: "USD",
       lines: [
         { accountId: "acct_1100", direction: "DEBIT", amountKobo: 100.5 },
         { accountId: "acct_2100", direction: "CREDIT", amountKobo: 100.5 },
@@ -104,6 +111,7 @@ describe("PostingEngine.buildEntry", () => {
   it("rejects invalid directions", () => {
     const result = engine.buildEntry({
       idempotencyKey: "test-invalid-direction",
+      currency: "USD", currency: "USD",
       lines: [
         { accountId: "acct_1100", direction: "DEBIT", amountKobo: 100_000n },
         {
@@ -120,6 +128,7 @@ describe("PostingEngine.buildEntry", () => {
   it("rejects zero amountKobo", () => {
     const result = engine.buildEntry({
       idempotencyKey: "test-zero",
+      currency: "USD", currency: "USD",
       lines: [
         { accountId: "acct_1100", direction: "DEBIT", amountKobo: 0n },
         { accountId: "acct_2100", direction: "CREDIT", amountKobo: 0n },
@@ -132,6 +141,7 @@ describe("PostingEngine.buildEntry", () => {
   it("rejects negative amountKobo", () => {
     const result = engine.buildEntry({
       idempotencyKey: "test-neg",
+      currency: "USD", currency: "USD",
       lines: [
         { accountId: "acct_1100", direction: "DEBIT", amountKobo: -100n },
         { accountId: "acct_2100", direction: "CREDIT", amountKobo: -100n },
@@ -144,6 +154,7 @@ describe("PostingEngine.buildEntry", () => {
   it("rejects negative number amountKobo (number type)", () => {
     const result = engine.buildEntry({
       idempotencyKey: "test-neg-num",
+      currency: "USD", currency: "USD",
       lines: [
         { accountId: "acct_1100", direction: "DEBIT", amountKobo: -1 },
         { accountId: "acct_2100", direction: "CREDIT", amountKobo: -1 },
@@ -156,6 +167,7 @@ describe("PostingEngine.buildEntry", () => {
   it("rejects zero number amountKobo (number type)", () => {
     const result = engine.buildEntry({
       idempotencyKey: "test-zero-num",
+      currency: "USD", currency: "USD",
       lines: [
         { accountId: "acct_1100", direction: "DEBIT", amountKobo: 0 },
         { accountId: "acct_2100", direction: "CREDIT", amountKobo: 0 },
@@ -168,6 +180,7 @@ describe("PostingEngine.buildEntry", () => {
   it("accepts integer number amountKobo", () => {
     const result = engine.buildEntry({
       idempotencyKey: "test-number",
+      currency: "USD", currency: "USD",
       lines: [
         { accountId: "acct_1100", direction: "DEBIT", amountKobo: 200_000 },
         { accountId: "acct_2100", direction: "CREDIT", amountKobo: 200_000 },
@@ -180,6 +193,7 @@ describe("PostingEngine.buildEntry", () => {
     const unsafeAmount = Number.MAX_SAFE_INTEGER + 1;
     const result = engine.buildEntry({
       idempotencyKey: "test-unsafe-number",
+      currency: "USD", currency: "USD",
       lines: [
         { accountId: "acct_1100", direction: "DEBIT", amountKobo: unsafeAmount },
         { accountId: "acct_2100", direction: "CREDIT", amountKobo: unsafeAmount },
@@ -193,6 +207,7 @@ describe("PostingEngine.buildEntry", () => {
     const before = new Date();
     const result = engine.buildEntry({
       idempotencyKey: "test-utc",
+      currency: "USD", currency: "USD",
       lines: [
         { accountId: "acct_1100", direction: "DEBIT", amountKobo: 1_000n },
         { accountId: "acct_2100", direction: "CREDIT", amountKobo: 1_000n },
@@ -214,6 +229,7 @@ describe("PostingEngine.buildEntry", () => {
     const fixedDate = new Date("2024-01-15T10:30:00.000Z");
     const result = engine.buildEntry({
       idempotencyKey: "test-fixed-date",
+      currency: "USD", currency: "USD",
       lines: [
         { accountId: "acct_1100", direction: "DEBIT", amountKobo: 1_000n },
         { accountId: "acct_2100", direction: "CREDIT", amountKobo: 1_000n },
@@ -231,6 +247,7 @@ describe("PostingEngine.buildEntry", () => {
   it("attaches metadata to lines", () => {
     const result = engine.buildEntry({
       idempotencyKey: "test-meta",
+      currency: "USD", currency: "USD",
       lines: [
         {
           accountId: "acct_2100",
@@ -264,7 +281,7 @@ describe("PostingEngine.post (with repository)", () => {
     const result = await engine.post(
       {
         idempotencyKey: "persist-1",
-        lines: [
+        currency: "USD", lines: [
           { accountId: "acct_1100", direction: "DEBIT", amountKobo: 100_000n },
           {
             accountId: "acct_2100",
@@ -284,7 +301,7 @@ describe("PostingEngine.post (with repository)", () => {
   it("returns existing entry on duplicate idempotency key", async () => {
     const cmd = {
       idempotencyKey: "idem-key-1",
-      lines: [
+      currency: "USD", lines: [
         { accountId: "acct_1100", direction: "DEBIT" as const, amountKobo: 1_000n },
         { accountId: "acct_2100", direction: "CREDIT" as const, amountKobo: 1_000n },
       ],
@@ -307,7 +324,7 @@ describe("PostingEngine.post (with repository)", () => {
     await engine.post(
       {
         idempotencyKey: "bad-post",
-        lines: [
+        currency: "USD", lines: [
           {
             accountId: "acct_1100",
             direction: "DEBIT",
