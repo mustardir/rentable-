@@ -46,7 +46,7 @@ export interface JournalEntry {
   /** Caller-supplied idempotency key; must be globally unique */
   readonly idempotencyKey: string;
   /** ISO 4217 currency code supplied by the application boundary. */
-  readonly currency?: string;
+  readonly currency: string;
   readonly status: JournalEntryStatus;
   readonly lines: readonly JournalLine[];
   /** Set when status transitions to POSTED */
@@ -97,7 +97,7 @@ export interface LineInput {
 export interface PostCommand {
   readonly idempotencyKey: string;
   /** ISO 4217 currency code supplied by the application boundary. */
-  readonly currency?: string;
+  readonly currency: string;
   readonly lines: readonly LineInput[];
   /** Caller-supplied UTC timestamp; defaults to now() if omitted */
   readonly postedAt?: Date;
