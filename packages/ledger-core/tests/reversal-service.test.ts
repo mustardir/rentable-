@@ -81,7 +81,7 @@ describe("ReversalService.reverse", () => {
   it("rejects reversal of a non-POSTED entry", async () => {
     const buildResult = engine.buildEntry({
       idempotencyKey: "non-posted-orig",
-      currency: "USD", currency: "USD",
+      currency: "USD",
       lines: [
         { accountId: "acct_1100", direction: "DEBIT", amountKobo: 1_000n },
         { accountId: "acct_2100", direction: "CREDIT", amountKobo: 1_000n },
