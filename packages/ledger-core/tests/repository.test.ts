@@ -5,6 +5,7 @@ import { PostingEngine } from "../src/posting-engine.js";
 function buildEntry(engine: PostingEngine, key: string) {
   const r = engine.buildEntry({
     idempotencyKey: key,
+      currency: "USD", currency: "USD",
     lines: [
       { accountId: "acct_1100", direction: "DEBIT", amountKobo: 1_000n },
       { accountId: "acct_2100", direction: "CREDIT", amountKobo: 1_000n },
