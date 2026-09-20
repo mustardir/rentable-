@@ -1,6 +1,8 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { PostingEngine } from '@fortress/ledger-core';
 import { EntryStatus, Prisma, TransactionStatus, TransactionType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { PrismaLedgerRepository } from '../ledger/prisma-ledger.repository';
 import { FinancialProductEligibilityService } from './financial-product-eligibility.service';
 import { FinancialProductService } from './financial-product.service';
 import type { InvestmentSubscriptionRepository } from './investment-subscription.repository';
@@ -8,12 +10,15 @@ import type { InvestmentSubscription } from './investment-subscription.types';
 
 @Injectable()
 export class InvestmentSubscriptionService {
+  private readonly postingEngine = new PostingEngine();
+
   constructor(
     private readonly products: FinancialProductService,
     private readonly eligibility: FinancialProductEligibilityService,
     @Inject('InvestmentSubscriptionRepository')
     private readonly repository: InvestmentSubscriptionRepository,
     private readonly prisma: PrismaService,
+    private readonly ledgerRepository: PrismaLedgerRepository,
   ) {}
 
   async create(input: {
@@ -121,39 +126,27 @@ export class InvestmentSubscriptionService {
         },
       });
 
-      const journalId = 'je_' + subscription.id;
-      const journalEntry = await tx.journalEntry.create({
-        data: {
-          id: journalId,
-          idempotencyKey: transactionKey,
-          reference: subscription.reference,
-          description: 'Investment funding ' + subscription.reference,
-          currency: subscription.currency,
-          status: EntryStatus.POSTED,
-          postedAt: new Date(),
-          metadata: { transactionId: transaction.id, subscriptionId: subscription.id, investorId: userId, productId: subscription.productId },
-          lines: {
-            create: [
-              {
-                id: journalId + '_debit',
-                accountId: 'acct_2100',
-                currency: subscription.currency,
-                direction: 'DEBIT',
-                amountKobo: subscription.amountMinor,
-                metadata: { investorId: userId, subscriptionId: subscription.id, role: 'investor-funding' },
-              },
-              {
-                id: journalId + '_credit',
-                accountId: 'acct_2200',
-                currency: subscription.currency,
-                direction: 'CREDIT',
-                amountKobo: subscription.amountMinor,
-                metadata: { investorId: userId, subscriptionId: subscription.id, role: 'product-obligation' },
-              },
-            ],
+      const entryResult = this.postingEngine.buildEntry({
+        idempotencyKey: transactionKey,
+        currency: subscription.currency,
+        lines: [
+          {
+            accountId: 'acct_2100',
+            direction: 'DEBIT',
+            amountKobo: subscription.amountMinor,
+            metadata: { investorId: userId, subscriptionId: subscription.id, role: 'investor-funding' },
           },
-        },
+          {
+            accountId: 'acct_2200',
+            direction: 'CREDIT',
+            amountKobo: subscription.amountMinor,
+            metadata: { investorId: userId, subscriptionId: subscription.id, role: 'product-obligation' },
+          },
+        ],
       });
+      if (!entryResult.ok) throw new BadRequestException(entryResult.error.message);
+
+      const journalEntry = await this.ledgerRepository.saveEntry(entryResult.value, tx);
 
       await tx.transaction.update({
         where: { id: transaction.id },
