@@ -32,6 +32,7 @@ describe("IdempotencyService.withIdempotency", () => {
       callCount++;
       const r = engine.buildEntry({
         idempotencyKey: "key-once",
+      currency: "USD", currency: "USD",
         lines: [
           { accountId: "acct_1100", direction: "DEBIT", amountKobo: 1_000n },
           {
@@ -55,6 +56,7 @@ describe("IdempotencyService.withIdempotency", () => {
       callCount++;
       return engine.buildEntry({
         idempotencyKey: "key-dup",
+      currency: "USD", currency: "USD",
         lines: [
           { accountId: "acct_1100", direction: "DEBIT", amountKobo: 5_000n },
           {
@@ -83,6 +85,7 @@ describe("IdempotencyService.withIdempotency", () => {
       callCount++;
       return engine.buildEntry({
         idempotencyKey: "race-key",
+      currency: "USD", currency: "USD",
         lines: [
           { accountId: "acct_1100", direction: "DEBIT", amountKobo: 1_000n },
           {
@@ -143,7 +146,7 @@ describe("checkIdempotencyKey", () => {
     await engine.post(
       {
         idempotencyKey: "used-key",
-        lines: [
+        currency: "USD", lines: [
           { accountId: "acct_1100", direction: "DEBIT", amountKobo: 1_000n },
           { accountId: "acct_2100", direction: "CREDIT", amountKobo: 1_000n },
         ],
