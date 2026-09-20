@@ -11,6 +11,9 @@ export class PrismaLedgerRepository implements Repository {
   constructor(private readonly prisma: PrismaService) {}
 
   async saveEntry(entry: JournalEntry, tx: PrismaTransaction | PrismaService = this.prisma): Promise<JournalEntry> {
+    const currency = entry.currency?.trim().toUpperCase();
+    if (!currency || !/^[A-Z]{3}$/.test(currency)) throw new Error('LEDGER_ENTRY_CURRENCY_REQUIRED');
+
     try {
       await tx.journalEntry.create({
         data: {
@@ -18,7 +21,7 @@ export class PrismaLedgerRepository implements Repository {
           idempotencyKey: entry.idempotencyKey,
           reference: entry.idempotencyKey,
           description: `Journal entry ${entry.idempotencyKey}`,
-          currency: 'NGN',
+          currency,
           status: entry.status as EntryStatus,
           postedAt: entry.postedAt,
           reversalOfId: entry.reversalOfId,
@@ -28,7 +31,7 @@ export class PrismaLedgerRepository implements Repository {
             create: entry.lines.map((line) => ({
               id: line.id,
               accountId: line.accountId,
-              currency: 'NGN',
+              currency,
               direction: line.direction,
               amountKobo: line.amountKobo,
               metadata: line.metadata as Prisma.InputJsonValue,
@@ -98,6 +101,7 @@ export class PrismaLedgerRepository implements Repository {
     return Object.freeze({
       id: entry.id,
       idempotencyKey: entry.idempotencyKey,
+      currency: entry.currency,
       status: entry.status === EntryStatus.DRAFT ? 'PENDING' : entry.status,
       lines: Object.freeze(lines),
       postedAt: entry.postedAt,
