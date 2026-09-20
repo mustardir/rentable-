@@ -6,7 +6,7 @@ import { InMemoryRepository } from "../src/repository.js";
 import type { JournalEntry } from "../src/journal-entry.js";
 
 async function postDeposit(engine: PostingEngine, repo: InMemoryRepository, key: string, amountKobo: bigint) {
-  const result = await engine.post({ idempotencyKey: key, lines: [
+  const result = await engine.post({ idempotencyKey: key, currency: "USD", lines: [
     { accountId: "acct_1100", direction: "DEBIT", amountKobo },
     { accountId: "acct_2100", direction: "CREDIT", amountKobo, metadata: { investorId: "investor-1" } },
   ] }, repo);
