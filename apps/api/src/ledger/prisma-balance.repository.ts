@@ -38,6 +38,7 @@ export class PrismaBalanceRepository {
     return {
       id: entry.id,
       idempotencyKey: entry.idempotencyKey,
+      currency: entry.currency,
       status: entry.status as JournalEntryStatus,
       lines: entry.lines.map((line) => {
         const amount = koboFromBigInt(line.amountKobo);
