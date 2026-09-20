@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { LedgerModule } from '../ledger/ledger.module';
 import { FinancialProductController } from './financial-product.controller';
 import { PrismaFinancialProductRepository } from './prisma-financial-product.repository';
 import { FinancialProductService } from './financial-product.service';
@@ -10,6 +11,7 @@ import { InvestmentSubscriptionService } from './investment-subscription.service
 import { PrismaInvestmentSubscriptionRepository } from './prisma-investment-subscription.repository';
 
 @Module({
+  imports: [LedgerModule],
   controllers: [FinancialProductController, FinancialProductEligibilityController, InvestmentSubscriptionController],
   providers: [
     FinancialProductService,
