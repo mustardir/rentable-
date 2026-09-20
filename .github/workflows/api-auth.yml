@@ -103,7 +103,7 @@ jobs:
         run: pnpm --filter @fortress-fund/api test -- --runInBand test/ledger-account-mapping.http.integration.spec.ts
 
       - name: Run ledger mapping controller authorization tests
-        run: pnpm --filter @fortress-fund/api test -- --runInBand src/ledger/ledger.controller.spec.ts
+        run: pnpm --filter @fortress-fund/api test --runInBand src/ledger/ledger.controller.spec.ts
 
       - name: Run investment subscription Jest tests
         run: pnpm --filter @fortress-fund/api test -- --runInBand test/investment-subscription.service.spec.ts
