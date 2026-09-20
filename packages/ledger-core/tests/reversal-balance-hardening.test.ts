@@ -30,7 +30,7 @@ describe("balance derivation and reversal invariants", () => {
   it("ignores a non-POSTED entry even when its lines contain reversal metadata", () => {
     const balanceService = new BalanceService();
     const pending: JournalEntry = {
-      id: "pending-reversal", idempotencyKey: "pending-reversal-key", status: "PENDING", reversalOfId: "some-original",
+      id: "pending-reversal", idempotencyKey: "pending-reversal-key", currency: "USD", status: "PENDING", reversalOfId: "some-original",
       lines: [{ id: "pending-line", journalEntryId: "pending-reversal", accountId: "acct_1100", direction: "DEBIT", amountKobo: 900_000n as any, metadata: {}, createdAt: new Date() }],
       postedAt: new Date(), createdAt: new Date(),
     };
