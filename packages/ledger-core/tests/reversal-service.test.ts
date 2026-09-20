@@ -8,7 +8,7 @@ import type { JournalEntry } from "../src/journal-entry.js";
 async function postDeposit(engine: PostingEngine, repo: InMemoryRepository, key: string, amountKobo: bigint) {
   const r = await engine.post({
     idempotencyKey: key,
-    lines: [
+    currency: "USD", lines: [
       { accountId: "acct_1100", direction: "DEBIT", amountKobo },
       { accountId: "acct_2100", direction: "CREDIT", amountKobo },
     ],
@@ -81,6 +81,7 @@ describe("ReversalService.reverse", () => {
   it("rejects reversal of a non-POSTED entry", async () => {
     const buildResult = engine.buildEntry({
       idempotencyKey: "non-posted-orig",
+      currency: "USD", currency: "USD",
       lines: [
         { accountId: "acct_1100", direction: "DEBIT", amountKobo: 1_000n },
         { accountId: "acct_2100", direction: "CREDIT", amountKobo: 1_000n },
