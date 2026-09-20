@@ -39,7 +39,7 @@ describe("UTC timestamps", () => {
     const fixed = new Date("2024-06-01T00:00:00.000Z");
     const result = engine.buildEntry({
       idempotencyKey: "utc-2",
-      currency: "USD", currency: "USD",
+      currency: "USD",
       lines: LINES,
       postedAt: fixed,
     });
