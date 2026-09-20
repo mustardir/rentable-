@@ -25,6 +25,7 @@ export class TransfersService {
     if (dto.sourceUserId === dto.destinationUserId) throw new BadRequestException('sourceUserId and destinationUserId must differ');
     const entryResult = this.postingEngine.buildEntry({
       idempotencyKey: dto.idempotencyKey,
+      currency,
       lines: [
         { accountId: CUSTOMER_DEPOSITS_ACCOUNT_ID, direction: 'DEBIT', amountKobo, metadata: { investorId: dto.sourceUserId, transferRole: 'source', reference } },
         { accountId: CUSTOMER_DEPOSITS_ACCOUNT_ID, direction: 'CREDIT', amountKobo, metadata: { investorId: dto.destinationUserId, transferRole: 'destination', reference } },
