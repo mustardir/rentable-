@@ -75,6 +75,7 @@ describe("BalanceService.getAccountBalance", () => {
     const pendingEntry: JournalEntry = {
       id: "fake-pending",
       idempotencyKey: "pending-key",
+      currency: "USD",
       status: "PENDING",
       lines: [
         {
