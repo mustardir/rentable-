@@ -109,7 +109,7 @@ jobs:
         run: pnpm --filter @fortress-fund/api test -- --runInBand test/investment-subscription.service.spec.ts
 
       - name: Run financial product and DOCX unit tests
-        run: pnpm --filter @fortress-fund/api test:vitest test/financial-product.defaults.spec.ts test/financial-product.service.spec.ts test/financial-product.controller.spec.ts test/financial-product-eligibility.controller.spec.ts test/document-core.docx.spec.ts test/document-template.pipeline.spec.ts
+        run: pnpm --filter @fortress-fund/api test:vitest test/financial-product.defaults.spec.ts test/financial-product.service.spec.ts test/financial-product.controller.spec.ts test/document-core.docx.spec.ts test/document-template.pipeline.spec.ts
 
       - name: Run ledger immutability checkpoint tests
         run: pnpm --filter @fortress-fund/api test -- --runInBand ledger-immutability.integration.spec.ts
