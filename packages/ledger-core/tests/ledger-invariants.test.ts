@@ -15,7 +15,7 @@ describe("ledger monetary invariants", () => {
   it("rejects an unbalanced journal entry", () => {
     const result = engine.buildEntry({
       idempotencyKey: "invariant-unbalanced",
-      currency: "USD", currency: "USD",
+      currency: "USD",
       lines: [
         { accountId: "acct_1100", direction: "DEBIT", amountKobo: 10_000n },
         { accountId: "acct_2100", direction: "CREDIT", amountKobo: 9_999n },
@@ -28,7 +28,7 @@ describe("ledger monetary invariants", () => {
   it("rejects a single-line entry", () => {
     const result = engine.buildEntry({
       idempotencyKey: "invariant-single-line",
-      currency: "USD", currency: "USD",
+      currency: "USD",
       lines: [{ accountId: "acct_1100", direction: "DEBIT", amountKobo: 10_000n }],
     });
     expect(result.ok).toBe(false);
