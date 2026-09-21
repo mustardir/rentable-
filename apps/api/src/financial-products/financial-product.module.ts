@@ -6,16 +6,19 @@ import { PrismaFinancialProductRepository } from './prisma-financial-product.rep
 import { FinancialProductService } from './financial-product.service';
 import { FinancialProductEligibilityController } from './financial-product-eligibility.controller';
 import { FinancialProductEligibilityService } from './financial-product-eligibility.service';
+import { InvestmentPortfolioController } from './investment-portfolio.controller';
+import { InvestmentPortfolioService } from './investment-portfolio.service';
 import { InvestmentSubscriptionController } from './investment-subscription.controller';
 import { InvestmentSubscriptionService } from './investment-subscription.service';
 import { PrismaInvestmentSubscriptionRepository } from './prisma-investment-subscription.repository';
 
 @Module({
   imports: [LedgerModule],
-  controllers: [FinancialProductController, FinancialProductEligibilityController, InvestmentSubscriptionController],
+  controllers: [FinancialProductController, FinancialProductEligibilityController, InvestmentPortfolioController, InvestmentSubscriptionController],
   providers: [
     FinancialProductService,
     FinancialProductEligibilityService,
+    InvestmentPortfolioService,
     InvestmentSubscriptionService,
     PrismaInvestmentSubscriptionRepository,
     {
