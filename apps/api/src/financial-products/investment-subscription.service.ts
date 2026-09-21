@@ -84,6 +84,20 @@ export class InvestmentSubscriptionService {
 
       await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${'investment:' + userId + ':' + subscription.currency}, 0))::text`;
 
+      const existingTransaction = await tx.transaction.findUnique({
+        where: { idempotencyKey: 'INVEST-FUND-' + subscription.idempotencyKey },
+      });
+      if (existingTransaction?.journalEntryId) {
+        return tx.investmentSubscription.update({
+          where: { id: subscription.id },
+          data: {
+            status: TransactionStatus.COMPLETED,
+            journalEntryId: existingTransaction.journalEntryId,
+            transactionId: existingTransaction.id,
+          },
+        });
+      }
+
       const balanceLines = await tx.journalLine.findMany({
         where: {
           accountId: 'acct_2100',
@@ -101,18 +115,6 @@ export class InvestmentSubscriptionService {
       if (available < subscription.amountMinor) throw new BadRequestException('INSUFFICIENT_AVAILABLE_BALANCE');
 
       const transactionKey = 'INVEST-FUND-' + subscription.idempotencyKey;
-      const existingTransaction = await tx.transaction.findUnique({ where: { idempotencyKey: transactionKey } });
-      if (existingTransaction?.journalEntryId) {
-        return tx.investmentSubscription.update({
-          where: { id: subscription.id },
-          data: {
-            status: TransactionStatus.COMPLETED,
-            journalEntryId: existingTransaction.journalEntryId,
-            transactionId: existingTransaction.id,
-          },
-        });
-      }
-
       const transaction = existingTransaction ?? await tx.transaction.create({
         data: {
           userId,
