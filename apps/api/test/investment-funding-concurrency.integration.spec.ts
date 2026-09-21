@@ -15,7 +15,6 @@ describePrisma('Investment funding concurrency and idempotency (PostgreSQL)', ()
   const subscriptionKey = `${prefix}-subscription-key`;
   const subscriptionReference = `${prefix}-subscription-ref`;
   const fundingKey = `INVEST-FUND-${subscriptionKey}`;
-  const fundingReference = subscriptionReference;
   const investorCashAccountId = 'acct_1100';
   const customerDepositsAccountId = 'acct_2100';
   const productObligationsAccountId = 'acct_2200';
@@ -24,73 +23,25 @@ describePrisma('Investment funding concurrency and idempotency (PostgreSQL)', ()
     await prisma.account.upsert({
       where: { code: '1100' },
       update: {},
-      create: {
-        id: investorCashAccountId,
-        code: '1100',
-        name: 'Investor Cash Test Account',
-        type: AccountType.ASSET,
-        normalBalance: Direction.DEBIT,
-      },
+      create: { id: investorCashAccountId, code: '1100', name: 'Investor Cash Test Account', type: AccountType.ASSET, normalBalance: Direction.DEBIT },
     });
-
     await prisma.account.upsert({
       where: { code: '2100' },
       update: {},
-      create: {
-        id: customerDepositsAccountId,
-        code: '2100',
-        name: 'Customer Deposits Test Account',
-        type: AccountType.LIABILITY,
-        normalBalance: Direction.CREDIT,
-      },
+      create: { id: customerDepositsAccountId, code: '2100', name: 'Customer Deposits Test Account', type: AccountType.LIABILITY, normalBalance: Direction.CREDIT },
     });
-
     await prisma.account.upsert({
       where: { code: '2200' },
       update: {},
-      create: {
-        id: productObligationsAccountId,
-        code: '2200',
-        name: 'Product Obligations Test Account',
-        type: AccountType.LIABILITY,
-        normalBalance: Direction.CREDIT,
-      },
+      create: { id: productObligationsAccountId, code: '2200', name: 'Product Obligations Test Account', type: AccountType.LIABILITY, normalBalance: Direction.CREDIT },
     });
-
-    await prisma.user.create({
-      data: {
-        id: userId,
-        email: `${userId}@test.invalid`,
-        passwordHash: 'test-hash',
-        role: UserRole.INVESTOR,
-      },
-    });
-
+    await prisma.user.create({ data: { id: userId, email: `${userId}@test.invalid`, passwordHash: 'test-hash', role: UserRole.INVESTOR } });
     await prisma.financialProduct.create({
-      data: {
-        id: productId,
-        code: productCode,
-        name: 'Concurrency Test Investment',
-        type: ProductType.INVESTMENT,
-        currency: 'USD',
-        minimumAmountMinor: 5000n,
-        status: ProductStatus.ACTIVE,
-      },
+      data: { id: productId, code: productCode, name: 'Concurrency Test Investment', type: ProductType.INVESTMENT, currency: 'USD', minimumAmountMinor: 5000n, status: ProductStatus.ACTIVE },
     });
-
     await prisma.investmentSubscription.create({
-      data: {
-        id: subscriptionId,
-        userId,
-        productId,
-        amountMinor: 5000n,
-        currency: 'USD',
-        status: 'PENDING',
-        idempotencyKey: subscriptionKey,
-        reference: subscriptionReference,
-      },
+      data: { id: subscriptionId, userId, productId, amountMinor: 5000n, currency: 'USD', status: 'PENDING', idempotencyKey: subscriptionKey, reference: subscriptionReference },
     });
-
     await prisma.journalEntry.create({
       data: {
         idempotencyKey: `${prefix}-initial-funding`,
@@ -101,19 +52,8 @@ describePrisma('Investment funding concurrency and idempotency (PostgreSQL)', ()
         postedAt: new Date(),
         lines: {
           create: [
-            {
-              accountId: investorCashAccountId,
-              currency: 'USD',
-              direction: Direction.DEBIT,
-              amountKobo: 5000n,
-            },
-            {
-              accountId: customerDepositsAccountId,
-              currency: 'USD',
-              direction: Direction.CREDIT,
-              amountKobo: 5000n,
-              metadata: { investorId: userId, funding: true },
-            },
+            { accountId: investorCashAccountId, currency: 'USD', direction: Direction.DEBIT, amountKobo: 5000n },
+            { accountId: customerDepositsAccountId, currency: 'USD', direction: Direction.CREDIT, amountKobo: 5000n, metadata: { investorId: userId, funding: true } },
           ],
         },
       },
@@ -123,11 +63,6 @@ describePrisma('Investment funding concurrency and idempotency (PostgreSQL)', ()
   afterAll(async () => {
     await prisma.investmentSubscription.deleteMany({ where: { id: subscriptionId } });
     await prisma.transaction.deleteMany({ where: { idempotencyKey: fundingKey } });
-    await prisma.journalEntry.deleteMany({
-      where: {
-        idempotencyKey: { in: [fundingKey, `${prefix}-initial-funding`] },
-      },
-    });
     await prisma.financialProduct.deleteMany({ where: { id: productId } });
     await prisma.user.deleteMany({ where: { id: userId } });
     await prisma.$disconnect();
@@ -167,30 +102,16 @@ describePrisma('Investment funding concurrency and idempotency (PostgreSQL)', ()
         select: { id: true, status: true, amountKobo: true, currency: true, journalEntryId: true },
       });
       expect(transactions).toHaveLength(1);
-      expect(transactions[0]).toMatchObject({
-        status: TransactionStatus.COMPLETED,
-        amountKobo: 5000n,
-        currency: 'USD',
-        journalEntryId: expect.any(String),
-      });
+      expect(transactions[0]).toMatchObject({ status: TransactionStatus.COMPLETED, amountKobo: 5000n, currency: 'USD', journalEntryId: expect.any(String) });
 
-      const journalEntries = await prisma.journalEntry.findMany({
-        where: { idempotencyKey: fundingKey },
-        include: { lines: true },
-      });
+      const journalEntries = await prisma.journalEntry.findMany({ where: { idempotencyKey: fundingKey }, include: { lines: true } });
       expect(journalEntries).toHaveLength(1);
       expect(journalEntries[0]?.status).toBe(EntryStatus.POSTED);
       expect(journalEntries[0]?.currency).toBe('USD');
       expect(journalEntries[0]?.lines).toHaveLength(2);
 
-      const subscription = await prisma.investmentSubscription.findUnique({
-        where: { id: subscriptionId },
-      });
-      expect(subscription).toMatchObject({
-        status: 'COMPLETED',
-        journalEntryId: journalEntries[0]?.id,
-        transactionId: transactions[0]?.id,
-      });
+      const subscription = await prisma.investmentSubscription.findUnique({ where: { id: subscriptionId } });
+      expect(subscription).toMatchObject({ status: 'COMPLETED', journalEntryId: journalEntries[0]?.id, transactionId: transactions[0]?.id });
 
       const replay = await service.fund(userId, subscriptionId);
       expect(replay.id).toBe(subscriptionId);
