@@ -124,6 +124,7 @@ export class InvestmentSubscriptionService {
           currency: subscription.currency,
           reference: subscription.reference,
           idempotencyKey: transactionKey,
+          investmentSubscriptionId: subscription.id,
           metadata: { subscriptionId: subscription.id, productId: subscription.productId },
         },
       });
@@ -183,7 +184,13 @@ export class InvestmentSubscriptionService {
         if (metadata?.subscriptionId !== subscription.id || existingTransaction.userId !== userId) {
           throw new BadRequestException('IDEMPOTENCY_CONFLICT');
         }
-        if (existingTransaction.journalEntryId) return subscription;
+        if (existingTransaction.journalEntryId) {
+          await tx.transaction.update({
+            where: { id: existingTransaction.id },
+            data: { investmentSubscriptionId: subscription.id },
+          });
+          return subscription;
+        }
       }
 
       const positionLines = await tx.journalLine.findMany({
