@@ -61,8 +61,9 @@ describePrisma('Investment funding concurrency and idempotency (PostgreSQL)', ()
   });
 
   afterAll(async () => {
-    await prisma.investmentSubscription.deleteMany({ where: { id: subscriptionId } });
+    // Transactions reference subscriptions with RESTRICT; remove lifecycle transactions first.
     await prisma.transaction.deleteMany({ where: { idempotencyKey: fundingKey } });
+    await prisma.investmentSubscription.deleteMany({ where: { id: subscriptionId } });
     await prisma.financialProduct.deleteMany({ where: { id: productId } });
     await prisma.user.deleteMany({ where: { id: userId } });
     await prisma.$disconnect();
