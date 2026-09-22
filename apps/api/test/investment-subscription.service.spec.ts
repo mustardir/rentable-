@@ -140,6 +140,7 @@ describe('InvestmentSubscriptionService.fund', () => {
         type: 'INVESTMENT_PURCHASE',
         amountKobo: 5000n,
         currency: 'USD',
+        investmentSubscriptionId: 'subscription-1',
       }),
     }));
     expect(ledgerRepository.saveEntry).toHaveBeenCalledWith(
@@ -206,6 +207,7 @@ describe('InvestmentSubscriptionService.redeem', () => {
         type: 'REDEMPTION',
         amountKobo: 5000n,
         currency: 'USD',
+        investmentSubscriptionId: 'subscription-1',
       }),
     }));
     expect(ledgerRepository.saveEntry).toHaveBeenCalledWith(
