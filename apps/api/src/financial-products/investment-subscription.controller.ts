@@ -15,6 +15,15 @@ export class InvestmentSubscriptionController {
     return this.subscriptions.fund(request.user.id, id);
   }
 
+  @Post('subscriptions/:id/redeem')
+  redeem(
+    @Req() request: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Body() body: { idempotencyKey: string },
+  ) {
+    return this.subscriptions.redeem(request.user.id, id, body.idempotencyKey);
+  }
+
   @Post('subscriptions')
   create(
     @Req() request: AuthenticatedRequest,
