@@ -89,7 +89,7 @@ describePrisma('Investment redemption concurrency and idempotency (PostgreSQL)',
 
   afterAll(async () => {
     await prisma.transaction.deleteMany({ where: { idempotencyKey: transactionKey } });
-    await prisma.journalEntry.deleteMany({ where: { idempotencyKey: { in: [positionEntryKey, transactionKey] } } });
+    // Journal entries are immutable by design and must remain append-only; do not delete test journal entries.
     await prisma.investmentSubscription.deleteMany({ where: { id: subscriptionId } });
     await prisma.financialProduct.deleteMany({ where: { id: productId } });
     await prisma.user.deleteMany({ where: { id: userId } });
