@@ -161,4 +161,89 @@ export class InvestmentSubscriptionService {
       });
     });
   }
+
+  async redeem(userId: string, subscriptionId: string, idempotencyKey: string): Promise<InvestmentSubscription> {
+    if (!idempotencyKey?.trim()) throw new BadRequestException('IDEMPOTENCY_KEY_REQUIRED');
+
+    return this.prisma.$transaction(async (tx) => {
+      const subscription = await tx.investmentSubscription.findUnique({
+        where: { id: subscriptionId },
+        include: { product: true },
+      });
+      if (!subscription) throw new NotFoundException('INVESTMENT_SUBSCRIPTION_NOT_FOUND');
+      if (subscription.userId !== userId) throw new BadRequestException('INVESTMENT_SUBSCRIPTION_ACCESS_DENIED');
+      if (subscription.status !== 'COMPLETED') throw new BadRequestException('INVESTMENT_SUBSCRIPTION_NOT_REDEEMABLE');
+
+      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${'investment:' + userId + ':' + subscription.currency}, 0))::text`;
+
+      const transactionKey = 'INVEST-REDEEM-' + idempotencyKey;
+      const existingTransaction = await tx.transaction.findUnique({ where: { idempotencyKey: transactionKey } });
+      if (existingTransaction) {
+        const metadata = existingTransaction.metadata as Prisma.JsonObject | null;
+        if (metadata?.subscriptionId !== subscription.id || existingTransaction.userId !== userId) {
+          throw new BadRequestException('IDEMPOTENCY_CONFLICT');
+        }
+        if (existingTransaction.journalEntryId) return subscription;
+      }
+
+      const positionLines = await tx.journalLine.findMany({
+        where: {
+          accountId: 'acct_2200',
+          currency: subscription.currency,
+          metadata: { path: ['investorId'], equals: userId },
+          journalEntry: { status: EntryStatus.POSTED },
+        },
+        select: { direction: true, amountKobo: true },
+      });
+
+      let position = 0n;
+      for (const line of positionLines) {
+        position += line.direction === 'CREDIT' ? line.amountKobo : -line.amountKobo;
+      }
+      if (position < subscription.amountMinor) throw new BadRequestException('INSUFFICIENT_INVESTMENT_POSITION');
+
+      const transaction = existingTransaction ?? await tx.transaction.create({
+        data: {
+          userId,
+          type: TransactionType.REDEMPTION,
+          status: TransactionStatus.PROCESSING,
+          amountKobo: subscription.amountMinor,
+          currency: subscription.currency,
+          reference: 'REDEEM-' + idempotencyKey,
+          idempotencyKey: transactionKey,
+          metadata: { subscriptionId: subscription.id, productId: subscription.productId },
+        },
+      });
+
+      const entryResult = this.postingEngine.buildEntry({
+        idempotencyKey: transactionKey,
+        currency: subscription.currency,
+        lines: [
+          {
+            accountId: 'acct_2200',
+            direction: 'DEBIT',
+            amountKobo: subscription.amountMinor,
+            metadata: { investorId: userId, subscriptionId: subscription.id, role: 'product-redemption' },
+          },
+          {
+            accountId: 'acct_2100',
+            direction: 'CREDIT',
+            amountKobo: subscription.amountMinor,
+            metadata: { investorId: userId, subscriptionId: subscription.id, role: 'investor-cash-credit' },
+          },
+        ],
+      });
+      if (!entryResult.ok) throw new BadRequestException(entryResult.error.message);
+
+      const journalEntry = await this.ledgerRepository.saveEntry(entryResult.value, tx);
+
+      await tx.transaction.update({
+        where: { id: transaction.id },
+        data: { status: TransactionStatus.COMPLETED, journalEntryId: journalEntry.id, completedAt: new Date() },
+      });
+
+      return subscription;
+    });
+  }
+
 }
