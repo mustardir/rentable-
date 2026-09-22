@@ -100,7 +100,7 @@ model User {
   kycRecords     KYCRecord[]
   ledgerAccounts UserLedgerAccount[]
   transactions   Transaction[]
-  investmentSubscriptions InvestmentSubscription[]
+  investmentSubscriptionPurchases InvestmentSubscription[] @relation("InvestmentSubscriptionPurchaseJournal")
   auditLogs      AuditLog[]
   journalEntriesCreated JournalEntry[] @relation("JournalEntryCreator")
 
@@ -287,6 +287,7 @@ model Transaction {
   user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   journalEntry   JournalEntry? @relation(fields: [journalEntryId], references: [id], onDelete: SetNull)
   investmentSubscriptionId String?
+  investmentSubscriptionPurchase InvestmentSubscription? @relation("InvestmentSubscriptionPurchaseTransaction")
   investmentSubscription InvestmentSubscription? @relation("InvestmentSubscriptionTransactionHistory", fields: [investmentSubscriptionId], references: [id], onDelete: Restrict)
 
   @@index([userId, status])
@@ -376,8 +377,8 @@ model InvestmentSubscription {
 
   user           User           @relation(fields: [userId], references: [id], onDelete: Restrict)
   product        FinancialProduct @relation(fields: [productId], references: [id], onDelete: Restrict)
-  journalEntry   JournalEntry?    @relation(fields: [journalEntryId], references: [id], onDelete: SetNull)
-  transaction    Transaction?     @relation(fields: [transactionId], references: [id], onDelete: SetNull)
+  journalEntry   JournalEntry?    @relation("InvestmentSubscriptionPurchaseJournal", fields: [journalEntryId], references: [id], onDelete: SetNull)
+  transaction    Transaction?     @relation("InvestmentSubscriptionPurchaseTransaction", fields: [transactionId], references: [id], onDelete: SetNull)
   transactions   Transaction[]    @relation("InvestmentSubscriptionTransactionHistory")
 
   @@index([userId, createdAt])
