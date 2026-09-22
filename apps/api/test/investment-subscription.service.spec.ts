@@ -158,3 +158,98 @@ describe('InvestmentSubscriptionService.fund', () => {
     expect(tx.investmentSubscription.update).toHaveBeenCalled();
   });
 });
+
+
+describe('InvestmentSubscriptionService.redeem', () => {
+  it('posts the canonical redemption entry and credits investor cash', async () => {
+    const subscription = {
+      id: 'subscription-1',
+      userId: 'user-1',
+      productId: 'product-1',
+      amountMinor: 5000n,
+      currency: 'USD',
+      status: 'COMPLETED',
+      idempotencyKey: 'key-fund-1',
+      reference: 'INV-key-fund-1',
+      product: { id: 'product-1', status: 'ACTIVE' },
+    };
+    const tx = {
+      investmentSubscription: {
+        findUnique: jest.fn().mockResolvedValue(subscription),
+      },
+      journalLine: {
+        findMany: jest.fn().mockResolvedValue([{ direction: 'CREDIT', amountKobo: 5000n }]),
+      },
+      transaction: {
+        findUnique: jest.fn().mockResolvedValue(null),
+        create: jest.fn().mockResolvedValue({ id: 'redeem-tx-1', journalEntryId: null }),
+        update: jest.fn().mockResolvedValue({}),
+      },
+      $queryRaw: jest.fn().mockResolvedValue([]),
+    };
+    const prisma = { $transaction: jest.fn(async (callback: any) => callback(tx)) };
+    const ledgerRepository = { saveEntry: jest.fn(async (entry: any) => entry) };
+
+    const service = new InvestmentSubscriptionService(
+      {} as never,
+      {} as never,
+      {} as never,
+      prisma as never,
+      ledgerRepository as never,
+    );
+
+    await expect(service.redeem('user-1', 'subscription-1', 'redeem-key-1'))
+      .resolves.toMatchObject({ id: 'subscription-1', status: 'COMPLETED' });
+
+    expect(tx.transaction.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        type: 'REDEMPTION',
+        amountKobo: 5000n,
+        currency: 'USD',
+      }),
+    }));
+    expect(ledgerRepository.saveEntry).toHaveBeenCalledWith(
+      expect.objectContaining({
+        idempotencyKey: 'INVEST-REDEEM-redeem-key-1',
+        currency: 'USD',
+        status: 'POSTED',
+        lines: expect.arrayContaining([
+          expect.objectContaining({ accountId: 'acct_2200', direction: 'DEBIT', amountKobo: 5000n }),
+          expect.objectContaining({ accountId: 'acct_2100', direction: 'CREDIT', amountKobo: 5000n }),
+        ]),
+      }),
+      tx,
+    );
+    expect(tx.transaction.update).toHaveBeenCalled();
+  });
+
+  it('rejects redemption when the investor position is insufficient', async () => {
+    const subscription = {
+      id: 'subscription-1',
+      userId: 'user-1',
+      productId: 'product-1',
+      amountMinor: 5000n,
+      currency: 'USD',
+      status: 'COMPLETED',
+      product: { id: 'product-1', status: 'ACTIVE' },
+    };
+    const tx = {
+      investmentSubscription: { findUnique: jest.fn().mockResolvedValue(subscription) },
+      journalLine: { findMany: jest.fn().mockResolvedValue([{ direction: 'CREDIT', amountKobo: 4999n }]) },
+      transaction: { findUnique: jest.fn().mockResolvedValue(null), create: jest.fn(), update: jest.fn() },
+      $queryRaw: jest.fn().mockResolvedValue([]),
+    };
+    const prisma = { $transaction: jest.fn(async (callback: any) => callback(tx)) };
+    const service = new InvestmentSubscriptionService(
+      {} as never,
+      {} as never,
+      {} as never,
+      prisma as never,
+      {} as never,
+    );
+
+    await expect(service.redeem('user-1', 'subscription-1', 'redeem-key-2'))
+      .rejects.toThrow('INSUFFICIENT_INVESTMENT_POSITION');
+    expect(tx.transaction.create).not.toHaveBeenCalled();
+  });
+});
