@@ -126,7 +126,7 @@ describePrisma('Investment redemption concurrency and idempotency (PostgreSQL)',
 
       const transactions = await prisma.transaction.findMany({
         where: { idempotencyKey: transactionKey },
-        select: { id: true, type: true, status: true, amountKobo: true, currency: true, journalEntryId: true },
+        select: { id: true, type: true, status: true, amountKobo: true, currency: true, journalEntryId: true, investmentSubscriptionId: true },
       });
       expect(transactions).toHaveLength(1);
       expect(transactions[0]).toMatchObject({
@@ -135,6 +135,7 @@ describePrisma('Investment redemption concurrency and idempotency (PostgreSQL)',
         amountKobo: 5000n,
         currency: 'USD',
         journalEntryId: expect.any(String),
+        investmentSubscriptionId: subscriptionId,
       });
 
       const journalEntries = await prisma.journalEntry.findMany({
@@ -177,7 +178,7 @@ describePrisma('Investment redemption concurrency and idempotency (PostgreSQL)',
         'INSUFFICIENT_INVESTMENT_POSITION',
       );
 
-      expect(await prisma.transaction.count({ where: { idempotencyKey: transactionKey } })).toBe(1);
+      expect(await prisma.transaction.count({ where: { idempotencyKey: transactionKey, investmentSubscriptionId: subscriptionId } })).toBe(1);
       expect(await prisma.journalEntry.count({ where: { idempotencyKey: transactionKey } })).toBe(1);
     } finally {
       await prismaService.$disconnect();
