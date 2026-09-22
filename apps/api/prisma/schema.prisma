@@ -286,10 +286,12 @@ model Transaction {
 
   user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   journalEntry   JournalEntry? @relation(fields: [journalEntryId], references: [id], onDelete: SetNull)
-  investmentSubscription InvestmentSubscription?
+  investmentSubscriptionId String?
+  investmentSubscription InvestmentSubscription? @relation("InvestmentSubscriptionTransactionHistory", fields: [investmentSubscriptionId], references: [id], onDelete: Restrict)
 
   @@index([userId, status])
   @@index([createdAt])
+  @@index([investmentSubscriptionId])
 }
 
 model Transfer {
@@ -376,6 +378,7 @@ model InvestmentSubscription {
   product        FinancialProduct @relation(fields: [productId], references: [id], onDelete: Restrict)
   journalEntry   JournalEntry?    @relation(fields: [journalEntryId], references: [id], onDelete: SetNull)
   transaction    Transaction?     @relation(fields: [transactionId], references: [id], onDelete: SetNull)
+  transactions   Transaction[]    @relation("InvestmentSubscriptionTransactionHistory")
 
   @@index([userId, createdAt])
   @@index([productId, status])
