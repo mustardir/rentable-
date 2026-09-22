@@ -100,7 +100,7 @@ model User {
   kycRecords     KYCRecord[]
   ledgerAccounts UserLedgerAccount[]
   transactions   Transaction[]
-  investmentSubscriptionPurchases InvestmentSubscription[] @relation("InvestmentSubscriptionPurchaseJournal")
+  investmentSubscriptions InvestmentSubscription[]
   auditLogs      AuditLog[]
   journalEntriesCreated JournalEntry[] @relation("JournalEntryCreator")
 
@@ -236,7 +236,7 @@ model JournalEntry {
 
   lines           JournalLine[]
   transactions    Transaction[]
-  investmentSubscriptions InvestmentSubscription[]
+  investmentSubscriptionPurchases InvestmentSubscription[] @relation("InvestmentSubscriptionPurchaseJournal")
   transfers       Transfer[]
   createdByUser   User?         @relation("JournalEntryCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
   reversalOf      JournalEntry? @relation("EntryReversal", fields: [reversalOfId], references: [id], onDelete: Restrict)
