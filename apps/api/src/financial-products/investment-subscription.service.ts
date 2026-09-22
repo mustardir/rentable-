@@ -218,6 +218,7 @@ export class InvestmentSubscriptionService {
           currency: subscription.currency,
           reference: 'REDEEM-' + idempotencyKey,
           idempotencyKey: transactionKey,
+          investmentSubscriptionId: subscription.id,
           metadata: { subscriptionId: subscription.id, productId: subscription.productId },
         },
       });
