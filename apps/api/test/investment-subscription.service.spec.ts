@@ -177,6 +177,7 @@ describe('InvestmentSubscriptionService.redeem', () => {
     const tx = {
       investmentSubscription: {
         findUnique: jest.fn().mockResolvedValue(subscription),
+        update: jest.fn().mockResolvedValue({ ...subscription, status: 'REDEEMED' }),
       },
       journalLine: {
         findMany: jest.fn().mockResolvedValue([{ direction: 'CREDIT', amountKobo: 5000n }]),
@@ -200,7 +201,7 @@ describe('InvestmentSubscriptionService.redeem', () => {
     );
 
     await expect(service.redeem('user-1', 'subscription-1', 'redeem-key-1'))
-      .resolves.toMatchObject({ id: 'subscription-1', status: 'COMPLETED' });
+      .resolves.toMatchObject({ id: 'subscription-1', status: 'REDEEMED' });
 
     expect(tx.transaction.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({
