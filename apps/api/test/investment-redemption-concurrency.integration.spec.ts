@@ -172,10 +172,10 @@ describePrisma('Investment redemption concurrency and idempotency (PostgreSQL)',
 
       const replay = await service.redeem(userId, subscriptionId, redemptionKey);
       expect(replay.id).toBe(subscriptionId);
-      expect(replay.status).toBe('COMPLETED');
+      expect(replay.status).toBe('REDEEMED');
 
       await expect(service.redeem(userId, subscriptionId, `${redemptionKey}-second`)).rejects.toThrow(
-        'INSUFFICIENT_INVESTMENT_POSITION',
+        'INVESTMENT_SUBSCRIPTION_NOT_REDEEMABLE',
       );
 
       expect(await prisma.transaction.count({ where: { idempotencyKey: transactionKey, investmentSubscriptionId: subscriptionId } })).toBe(1);
