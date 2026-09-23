@@ -1,4 +1,3 @@
-import { describe, expect, it, vi } from 'vitest';
 import { InvestmentPortfolioController } from '../src/financial-products/investment-portfolio.controller';
 
 describe('InvestmentPortfolioController', () => {
@@ -13,7 +12,7 @@ describe('InvestmentPortfolioController', () => {
       },
     ];
     const service = {
-      getMyPositions: vi.fn().mockResolvedValue(positions),
+      getMyPositions: jest.fn().mockResolvedValue(positions),
     };
     const controller = new InvestmentPortfolioController(service as never);
 
