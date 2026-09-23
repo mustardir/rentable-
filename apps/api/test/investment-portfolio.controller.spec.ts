@@ -25,7 +25,7 @@ describe('InvestmentPortfolioController', () => {
 
   it('passes an empty currency when the query parameter is omitted', async () => {
     const service = {
-      getMyPositions: vi.fn().mockResolvedValue([]),
+      getMyPositions: jest.fn().mockResolvedValue([]),
     };
     const controller = new InvestmentPortfolioController(service as never);
 
