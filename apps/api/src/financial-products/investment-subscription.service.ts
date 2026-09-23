@@ -173,7 +173,6 @@ export class InvestmentSubscriptionService {
       });
       if (!subscription) throw new NotFoundException('INVESTMENT_SUBSCRIPTION_NOT_FOUND');
       if (subscription.userId !== userId) throw new BadRequestException('INVESTMENT_SUBSCRIPTION_ACCESS_DENIED');
-      if (subscription.status !== 'COMPLETED') throw new BadRequestException('INVESTMENT_SUBSCRIPTION_NOT_REDEEMABLE');
 
       await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${'investment:' + userId + ':' + subscription.currency}, 0))::text`;
 
@@ -191,6 +190,10 @@ export class InvestmentSubscriptionService {
           });
           return subscription;
         }
+      }
+
+      if (subscription.status !== 'COMPLETED') {
+        throw new BadRequestException('INVESTMENT_SUBSCRIPTION_NOT_REDEEMABLE');
       }
 
       const positionLines = await tx.journalLine.findMany({
@@ -250,7 +253,10 @@ export class InvestmentSubscriptionService {
         data: { status: TransactionStatus.COMPLETED, journalEntryId: journalEntry.id, completedAt: new Date() },
       });
 
-      return subscription;
+      return tx.investmentSubscription.update({
+        where: { id: subscription.id },
+        data: { status: 'REDEEMED' },
+      });
     });
   }
 
