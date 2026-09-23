@@ -100,6 +100,22 @@ describe('InvestmentSubscriptionService.fund', () => {
     return { tx, prisma: { $transaction: jest.fn(async (callback: any) => callback(tx)) } };
   }
 
+
+  it('rejects funding by a different investor before any transaction is created', async () => {
+    const { prisma, tx } = prismaMock();
+    const service = new InvestmentSubscriptionService(
+      {} as never,
+      {} as never,
+      {} as never,
+      prisma as never,
+      {} as never,
+    );
+
+    await expect(service.fund('different-user', 'subscription-1'))
+      .rejects.toThrow('INVESTMENT_SUBSCRIPTION_ACCESS_DENIED');
+    expect(tx.transaction.create).not.toHaveBeenCalled();
+  });
+
   it('rejects funding when available balance is insufficient', async () => {
     const { prisma, tx } = prismaMock();
     tx.journalLine.findMany.mockResolvedValue([{ direction: 'CREDIT', amountKobo: 4999n }]);
@@ -162,6 +178,69 @@ describe('InvestmentSubscriptionService.fund', () => {
 
 
 describe('InvestmentSubscriptionService.redeem', () => {
+
+  it('rejects redemption by a different investor before any transaction is created', async () => {
+    const subscription = {
+      id: 'subscription-1',
+      userId: 'user-1',
+      productId: 'product-1',
+      amountMinor: 5000n,
+      currency: 'USD',
+      status: 'COMPLETED',
+      product: { id: 'product-1', status: 'ACTIVE' },
+    };
+    const tx = {
+      investmentSubscription: { findUnique: jest.fn().mockResolvedValue(subscription) },
+      journalLine: { findMany: jest.fn() },
+      transaction: { findUnique: jest.fn(), create: jest.fn(), update: jest.fn() },
+      $queryRaw: jest.fn(),
+    };
+    const prisma = { $transaction: jest.fn(async (callback: any) => callback(tx)) };
+    const service = new InvestmentSubscriptionService(
+      {} as never,
+      {} as never,
+      {} as never,
+      prisma as never,
+      {} as never,
+    );
+
+    await expect(service.redeem('different-user', 'subscription-1', 'redeem-key-owner'))
+      .rejects.toThrow('INVESTMENT_SUBSCRIPTION_ACCESS_DENIED');
+    expect(tx.transaction.create).not.toHaveBeenCalled();
+    expect(tx.journalLine.findMany).not.toHaveBeenCalled();
+  });
+
+  it('rejects a second redemption after the subscription is already redeemed', async () => {
+    const subscription = {
+      id: 'subscription-1',
+      userId: 'user-1',
+      productId: 'product-1',
+      amountMinor: 5000n,
+      currency: 'USD',
+      status: 'REDEEMED',
+      product: { id: 'product-1', status: 'ACTIVE' },
+    };
+    const tx = {
+      investmentSubscription: { findUnique: jest.fn().mockResolvedValue(subscription) },
+      journalLine: { findMany: jest.fn() },
+      transaction: { findUnique: jest.fn().mockResolvedValue(null), create: jest.fn(), update: jest.fn() },
+      $queryRaw: jest.fn().mockResolvedValue([]),
+    };
+    const prisma = { $transaction: jest.fn(async (callback: any) => callback(tx)) };
+    const service = new InvestmentSubscriptionService(
+      {} as never,
+      {} as never,
+      {} as never,
+      prisma as never,
+      {} as never,
+    );
+
+    await expect(service.redeem('user-1', 'subscription-1', 'redeem-key-again'))
+      .rejects.toThrow('INVESTMENT_SUBSCRIPTION_NOT_REDEEMABLE');
+    expect(tx.transaction.create).not.toHaveBeenCalled();
+    expect(tx.journalLine.findMany).not.toHaveBeenCalled();
+  });
+
   it('posts the canonical redemption entry and credits investor cash', async () => {
     const subscription = {
       id: 'subscription-1',
