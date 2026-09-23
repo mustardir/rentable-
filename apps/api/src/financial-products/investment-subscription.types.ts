@@ -1,4 +1,4 @@
-export type InvestmentSubscriptionStatus = 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
+export type InvestmentSubscriptionStatus = 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'REDEEMED' | 'FAILED' | 'CANCELLED';
 
 export interface CreateInvestmentSubscriptionInput {
   readonly userId: string;
