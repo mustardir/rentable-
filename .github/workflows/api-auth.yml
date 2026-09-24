@@ -111,6 +111,9 @@ jobs:
       - name: Run investment funding concurrency integration test
         run: pnpm --filter @fortress-fund/api test -- --runInBand test/investment-funding-concurrency.integration.spec.ts
 
+      - name: Run investment redemption concurrency integration test
+        run: pnpm --filter @fortress-fund/api test -- --runInBand test/investment-redemption-concurrency.integration.spec.ts
+
       - name: Run financial product and DOCX unit tests
         run: pnpm --filter @fortress-fund/api test:vitest test/financial-product.defaults.spec.ts test/financial-product.service.spec.ts test/financial-product.controller.spec.ts test/document-core.docx.spec.ts test/document-template.pipeline.spec.ts
 
@@ -123,7 +126,7 @@ jobs:
           echo "## 🔐 Ledger Immutability Checkpoint" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Migration:** Fortress Guard PostgreSQL triggers" >> $GITHUB_STEP_SUMMARY
-          echo "**Test File:** \`apps/api/test/ledger-immutability.integration.spec.ts\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Test File:** `apps/api/test/ledger-immutability.integration.spec.ts`" >> $GITHUB_STEP_SUMMARY
           echo "**Test Cases:** 12" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "✅ **Checkpoint requirements verified:**" >> $GITHUB_STEP_SUMMARY
