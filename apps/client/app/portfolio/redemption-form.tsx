@@ -24,11 +24,14 @@ export default function RedemptionForm({
     setSubmitting(true);
 
     try {
-      const response = await fetch("/api/investments/" + encodeURIComponent(subscriptionId) + "/redeem",
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ idempotencyKey: crypto.randomUUID() }),
-      });
+      const response = await fetch(
+        "/api/investments/" + encodeURIComponent(subscriptionId) + "/redeem",
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ idempotencyKey: crypto.randomUUID() }),
+        },
+      );
       const data = await response.json().catch(() => null);
 
       if (!response.ok) {
