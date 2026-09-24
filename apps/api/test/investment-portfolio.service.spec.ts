@@ -26,11 +26,15 @@ describe('InvestmentPortfolioService', () => {
         findMany: jest.fn().mockResolvedValue([
           {
             id: 'sub-1',
-            product: { id: 'product-1', code: 'FORT-INVEST-001', name: 'Fortress Investment', currency: 'USD' },
+            userId: 'user-1',
+            currency: 'USD',
+            product: { id: 'product-1', code: 'FORT-INVEST-001', name: 'Fortress Investment' },
           },
           {
             id: 'sub-2',
-            product: { id: 'product-1', code: 'FORT-INVEST-001', name: 'Fortress Investment', currency: 'USD' },
+            userId: 'user-1',
+            currency: 'USD',
+            product: { id: 'product-1', code: 'FORT-INVEST-001', name: 'Fortress Investment' },
           },
         ]),
       },
@@ -40,11 +44,20 @@ describe('InvestmentPortfolioService', () => {
 
     await expect(service.getMyPositions('user-1', 'usd')).resolves.toEqual([
       {
+        subscriptionId: 'sub-1',
         productId: 'product-1',
         productCode: 'FORT-INVEST-001',
         productName: 'Fortress Investment',
         currency: 'USD',
-        amountMinor: '7000',
+        amountMinor: '4000',
+      },
+      {
+        subscriptionId: 'sub-2',
+        productId: 'product-1',
+        productCode: 'FORT-INVEST-001',
+        productName: 'Fortress Investment',
+        currency: 'USD',
+        amountMinor: '3000',
       },
     ]);
   });
@@ -71,7 +84,7 @@ describe('InvestmentPortfolioService', () => {
             id: 'sub-1',
             userId: 'user-1',
             currency: 'USD',
-            product: { id: 'product-1', code: 'FORT-INVEST-001', name: 'Fortress Investment', currency: 'USD' },
+            product: { id: 'product-1', code: 'FORT-INVEST-001', name: 'Fortress Investment' },
           },
         ]),
       },
@@ -110,7 +123,9 @@ describe('InvestmentPortfolioService', () => {
         findMany: jest.fn().mockResolvedValue([
           {
             id: 'sub-1',
-            product: { id: 'product-1', code: 'FORT-INVEST-001', name: 'Fortress Investment', currency: 'USD' },
+            userId: 'user-1',
+            currency: 'USD',
+            product: { id: 'product-1', code: 'FORT-INVEST-001', name: 'Fortress Investment' },
           },
         ]),
       },
