@@ -9,6 +9,7 @@ const API_URL =
   "http://localhost:3001";
 
 type Position = {
+  subscriptionId: string;
   productId: string;
   productCode: string;
   productName: string;
@@ -116,7 +117,7 @@ export default async function PortfolioPage() {
                   </p>
                 </div>
                 <RedemptionForm
-                  subscriptionId={position.productId}
+                  subscriptionId={position.subscriptionId}
                   productName={position.productName}
                   amount={money(position.amountMinor, position.currency)}
                 />
