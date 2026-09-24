@@ -28,7 +28,8 @@ describe('InvestmentPortfolioService', () => {
             id: 'sub-1',
             userId: 'user-1',
             currency: 'USD',
-            product: { id: 'product-1', code: 'FORT-INVEST-001', name: 'Fortress Investment' },
+            productId: 'product-1',
+            product: { code: 'FORT-INVEST-001', name: 'Fortress Investment' },
           },
           {
             id: 'sub-2',
