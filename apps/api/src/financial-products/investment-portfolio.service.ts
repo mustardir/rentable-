@@ -3,6 +3,7 @@ import { EntryStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
 export interface InvestmentPortfolioPosition {
+  subscriptionId: string;
   productId: string;
   productCode: string;
   productName: string;
@@ -51,8 +52,8 @@ export class InvestmentPortfolioService {
       include: { product: true },
     });
 
-    const productBySubscriptionId = new Map(
-      subscriptions.map((subscription) => [subscription.id, subscription.product]),
+    const subscriptionById = new Map(
+      subscriptions.map((subscription) => [subscription.id, subscription]),
     );
 
     const balances = new Map<string, InvestmentPortfolioPosition & { amount: bigint }>();
@@ -61,20 +62,21 @@ export class InvestmentPortfolioService {
       const subscriptionId = this.metadataValue(line.metadata, 'subscriptionId');
       if (!subscriptionId) continue;
 
-      const product = productBySubscriptionId.get(subscriptionId);
-      if (!product) continue;
+      const subscription = subscriptionById.get(subscriptionId);
+      if (!subscription) continue;
 
-      const existing = balances.get(product.id);
+      const existing = balances.get(subscriptionId);
       const signedAmount = line.direction === 'CREDIT' ? line.amountKobo : -line.amountKobo;
 
       if (existing) {
         existing.amount += signedAmount;
       } else {
-        balances.set(product.id, {
-          productId: product.id,
-          productCode: product.code,
-          productName: product.name,
-          currency: product.currency,
+        balances.set(subscriptionId, {
+          subscriptionId: subscription.id,
+          productId: subscription.productId,
+          productCode: subscription.product.code,
+          productName: subscription.product.name,
+          currency: subscription.currency,
           amount: signedAmount,
           amountMinor: '0',
         });
