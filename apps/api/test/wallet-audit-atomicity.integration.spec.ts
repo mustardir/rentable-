@@ -4,6 +4,7 @@ import { WalletService } from '../src/wallet/wallet.service';
 const prisma = new PrismaClient();
 const DATABASE_URL = process.env.DATABASE_URL;
 const describePrisma = DATABASE_URL ? describe : describe.skip;
+const ledgerRepository = { saveEntry: jest.fn() };
 
 const INVESTOR_CASH_ACCOUNT_ID = 'acct_1100';
 const CUSTOMER_DEPOSITS_ACCOUNT_ID = 'acct_2100';
