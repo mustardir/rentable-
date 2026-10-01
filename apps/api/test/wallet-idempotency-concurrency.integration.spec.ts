@@ -11,7 +11,7 @@ describe('WalletService idempotency concurrency', () => {
   beforeAll(async () => {
     prisma = new PrismaService();
     await prisma.$connect();
-    service = new WalletService(prisma, { append: jest.fn() } as any);
+    service = new WalletService(prisma, { append: jest.fn() } as any, ledgerRepository as any);
     const investor = await prisma.user.findFirst({ where: { role: UserRole.INVESTOR, isActive: true }, select: { id: true } });
     if (!investor) throw new Error('No active investor fixture available');
     investorId = investor.id;
