@@ -61,7 +61,7 @@ describe('TransfersService ledger integration', () => {
   });
 
   it('allows a transfer when the source investor has enough available balance', async () => {
-    const { prisma, tx } = makePrisma([{ direction: 'CREDIT', amountKobo: 10000n }]);
+    const { prisma, tx, ledgerRepository } = makePrisma([{ direction: 'CREDIT', amountKobo: 10000n }]);
     const journalEntry = { id: 'entry-sufficient', idempotencyKey: 'transfer-sufficient', lines: [] }; tx.journalEntry.create.mockResolvedValue(journalEntry); tx.transfer.create.mockResolvedValue({ id: 'transfer-sufficient', journalEntry });
     await new TransfersService(prisma as any, ledgerRepository as any).createTransfer({ ...dto, idempotencyKey: 'transfer-sufficient', reference: 'TRF-SUFFICIENT' });
     expect(tx.transaction.create).toHaveBeenCalledTimes(1); expect(ledgerRepository.saveEntry).toHaveBeenCalledTimes(1); expect(tx.transfer.create).toHaveBeenCalledTimes(1);
