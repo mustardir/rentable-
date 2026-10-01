@@ -1,6 +1,7 @@
 import { PrismaClient, EntryStatus, Direction, AccountType, UserRole } from '@prisma/client';
 import { TransfersService } from '../src/transfers/transfers.service';
 import { PrismaLedgerRepository } from '../src/ledger/prisma-ledger.repository';
+import { PrismaLedgerRepository } from '../src/ledger/prisma-ledger.repository';
 
 const prisma = new PrismaClient();
 const DATABASE_URL = process.env.DATABASE_URL;
