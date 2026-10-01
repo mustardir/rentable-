@@ -1,10 +1,11 @@
 import { PrismaClient, AccountType, Direction, TransactionStatus, TransactionType, UserRole } from '@prisma/client';
 import { WalletService } from '../src/wallet/wallet.service';
+import { PrismaLedgerRepository } from '../src/ledger/prisma-ledger.repository';
 
 const prisma = new PrismaClient();
 const DATABASE_URL = process.env.DATABASE_URL;
 const describePrisma = DATABASE_URL ? describe : describe.skip;
-const ledgerRepository = { saveEntry: jest.fn() };
+const ledgerRepository = new PrismaLedgerRepository(prisma as any);
 
 const INVESTOR_CASH_ACCOUNT_ID = 'acct_1100';
 const CUSTOMER_DEPOSITS_ACCOUNT_ID = 'acct_2100';
@@ -87,7 +88,7 @@ describePrisma('Fortress Wallet Audit Atomicity (PostgreSQL)', () => {
       append: jest.fn(),
       appendInTransaction: jest.fn().mockRejectedValue(new Error('AUDIT_APPEND_FAILED')),
     };
-    const service = new WalletService(prisma as any, audit as any, ledgerRepository as any);
+    const service = new WalletService(prisma as any, audit as any, ledgerRepository);
 
     await expect(service.confirmRequest(approvalTransactionId, operatorId)).rejects.toThrow('AUDIT_APPEND_FAILED');
 
