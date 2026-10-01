@@ -7,6 +7,7 @@ describe('WalletService investor authorization', () => {
     transaction: { findUnique: jest.fn(), create: jest.fn() },
   } as any;
   const audit = { append: jest.fn() } as any;
+  const ledgerRepository = { saveEntry: jest.fn() } as any;
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -17,7 +18,7 @@ describe('WalletService investor authorization', () => {
   it('allows an active investor to create a deposit request', async () => {
     prisma.user.findUnique.mockResolvedValue({ id: 'investor-1', isActive: true, role: UserRole.INVESTOR });
 
-    const result = await new WalletService(prisma, audit).createDepositRequest('investor-1', {
+    const result = await new WalletService(prisma, audit, ledgerRepository).createDepositRequest('investor-1', {
       amountKobo: '1000',
       idempotencyKey: 'dep-investor-1',
       currency: 'USD',
@@ -35,7 +36,7 @@ describe('WalletService investor authorization', () => {
   ])('rejects %s from creating wallet requests', async (role) => {
     prisma.user.findUnique.mockResolvedValue({ id: 'operator-1', isActive: true, role });
 
-    await expect(new WalletService(prisma, audit).createWithdrawalRequest('operator-1', {
+    await expect(new WalletService(prisma, audit, ledgerRepository).createWithdrawalRequest('operator-1', {
       amountKobo: '1000',
       idempotencyKey: `wdr-${role}`,
       currency: 'USD',
