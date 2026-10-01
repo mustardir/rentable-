@@ -3,6 +3,7 @@ import { PostingEngine } from '@fortress/ledger-core';
 import { EntryStatus, Prisma, TransactionStatus, TransactionType, UserRole } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { PrismaAuditRepository } from '../audit/prisma-audit.repository';
+import { PrismaLedgerRepository } from '../ledger/prisma-ledger.repository';
 import type { CreateWalletRequestDto } from './dto/create-wallet-request.dto';
 
 const INVESTOR_CASH_ACCOUNT_ID = 'acct_1100';
@@ -12,7 +13,11 @@ type WalletTransactionClient = Prisma.TransactionClient;
 @Injectable()
 export class WalletService {
   private readonly postingEngine = new PostingEngine();
-  constructor(private readonly prisma: PrismaService, private readonly audit: PrismaAuditRepository) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly audit: PrismaAuditRepository,
+    private readonly ledgerRepository: PrismaLedgerRepository,
+  ) {}
 
   async getOperatorRequests(limit = 50) { return this.prisma.transaction.findMany({ where: { type: { in: [TransactionType.DEPOSIT, TransactionType.WITHDRAWAL] }, status: TransactionStatus.PENDING }, orderBy: { createdAt: 'asc' }, take: Math.min(100, Math.max(1, limit)), select: { id: true, type: true, status: true, amountKobo: true, currency: true, reference: true, idempotencyKey: true, journalEntryId: true, completedAt: true, createdAt: true, user: { select: { id: true, email: true, profile: { select: { firstName: true, lastName: true } } } } } }); }
   forbiddenOperator(): never { throw new ForbiddenException('Only an active admin or compliance user can access wallet approvals'); }
@@ -67,7 +72,12 @@ export class WalletService {
       if (transaction.type === TransactionType.WITHDRAWAL) await this.assertSufficientBalance(tx, transaction.userId, transaction.currency, transaction.amountKobo);
       const entryResult = this.postingEngine.buildEntry({ idempotencyKey: `wallet:${transaction.idempotencyKey}`, currency: transaction.currency, lines: transaction.type === TransactionType.DEPOSIT ? [{ accountId: INVESTOR_CASH_ACCOUNT_ID, direction: 'DEBIT', amountKobo: transaction.amountKobo, metadata: { investorId: transaction.userId, transactionType: 'DEPOSIT', reference: transaction.reference } }, { accountId: CUSTOMER_DEPOSITS_ACCOUNT_ID, direction: 'CREDIT', amountKobo: transaction.amountKobo, metadata: { investorId: transaction.userId, transactionType: 'DEPOSIT', reference: transaction.reference } }] : [{ accountId: CUSTOMER_DEPOSITS_ACCOUNT_ID, direction: 'DEBIT', amountKobo: transaction.amountKobo, metadata: { investorId: transaction.userId, transactionType: 'WITHDRAWAL', reference: transaction.reference } }, { accountId: INVESTOR_CASH_ACCOUNT_ID, direction: 'CREDIT', amountKobo: transaction.amountKobo, metadata: { investorId: transaction.userId, transactionType: 'WITHDRAWAL', reference: transaction.reference } }] });
       if (!entryResult.ok) throw new BadRequestException(entryResult.error.message);
-      const journalEntry = await tx.journalEntry.create({ data: { id: entryResult.value.id, idempotencyKey: entryResult.value.idempotencyKey, reference: transaction.reference, description: `${transaction.type === TransactionType.DEPOSIT ? 'Deposit' : 'Withdrawal'} ${transaction.reference}`, currency: transaction.currency, status: EntryStatus.POSTED, postedAt: entryResult.value.postedAt, createdAt: entryResult.value.createdAt, createdByUserId: adminUserId, metadata: { transactionId: transaction.id, confirmedByUserId: adminUserId }, lines: { create: entryResult.value.lines.map((line) => ({ id: line.id, accountId: line.accountId, currency: transaction.currency, direction: line.direction, amountKobo: line.amountKobo, metadata: line.metadata, createdAt: line.createdAt })) } } });
+      const journalEntry = await this.ledgerRepository.saveEntry(entryResult.value, tx, {
+        reference: transaction.reference,
+        description: `${transaction.type === TransactionType.DEPOSIT ? 'Deposit' : 'Withdrawal'} ${transaction.reference}`,
+        metadata: { transactionId: transaction.id, confirmedByUserId: adminUserId },
+        createdByUserId: adminUserId,
+      });
       const updated = await tx.transaction.update({ where: { id: transaction.id }, data: { status: TransactionStatus.COMPLETED, journalEntryId: journalEntry.id, completedAt: new Date(), metadata: { workflow: transaction.type === TransactionType.DEPOSIT ? 'customer_deposit' : 'customer_withdrawal', confirmedByUserId: adminUserId } } });
       await this.audit.appendInTransaction(tx, { actorUserId: admin.id, actorRole: admin.role, eventType: 'WALLET_REQUEST_APPROVED', entityType: 'Transaction', entityId: updated.id, payload: { transactionId: updated.id, reference: updated.reference, type: updated.type, amountKobo: updated.amountKobo.toString(), currency: updated.currency } });
       return updated;

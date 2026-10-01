@@ -46,6 +46,24 @@ describePrisma('PrismaLedgerRepository concurrent idempotency', () => {
     await prisma.$disconnect();
   });
 
+  it('preserves workflow persistence metadata while saving a ledger entry', async () => {
+    const key = `${prefix}-metadata-key`;
+    const created = entry(`${prefix}-metadata-entry`, key);
+    const saved = await repository.saveEntry(created, undefined as never, {
+      reference: `${prefix}-reference`,
+      description: 'Transfer metadata test',
+      metadata: { workflow: 'transfer', transactionId: `${prefix}-transaction` },
+    });
+
+    expect(saved.id).toBe(created.id);
+    const persisted = await prisma.journalEntry.findUnique({ where: { idempotencyKey: key } });
+    expect(persisted).toMatchObject({
+      reference: `${prefix}-reference`,
+      description: 'Transfer metadata test',
+      metadata: { workflow: 'transfer', transactionId: `${prefix}-transaction` },
+    });
+  });
+
   it('returns one authoritative entry for concurrent duplicate idempotency keys', async () => {
     const key = `${prefix}-key`;
     const first = entry(`${prefix}-entry-a`, key);
