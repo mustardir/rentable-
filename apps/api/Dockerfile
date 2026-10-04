@@ -12,6 +12,7 @@ RUN pnpm install --filter @fortress-fund/api... --frozen-lockfile
 FROM deps AS build
 COPY . .
 RUN pnpm --filter @fortress-fund/api prisma generate
+RUN cd apps/api && node -e "const p=require('@prisma/client'); console.log({EntryStatus:'EntryStatus' in p,Direction:'Direction' in p,AccountType:'AccountType' in p,UserRole:'UserRole' in p,prismaVersion:p.Prisma?.prismaVersion})"
 RUN pnpm --filter @fortress-fund/api build
 
 FROM node:20-alpine AS runner
