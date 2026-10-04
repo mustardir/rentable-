@@ -109,7 +109,7 @@ describePrisma('Fortress Wallet Audit Atomicity (PostgreSQL)', () => {
       append: jest.fn(),
       appendInTransaction: jest.fn().mockRejectedValue(new Error('AUDIT_APPEND_FAILED')),
     };
-    const service = new WalletService(prisma as any, audit as any);
+    const service = new WalletService(prisma as any, audit as any, ledgerRepository);
 
     await expect(service.rejectRequest(rejectionTransactionId, operatorId, 'KYC mismatch')).rejects.toThrow('AUDIT_APPEND_FAILED');
 
