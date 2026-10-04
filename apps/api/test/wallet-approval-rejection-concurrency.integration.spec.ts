@@ -22,13 +22,27 @@ describePrisma('Fortress Wallet Approval/Rejection Concurrency (PostgreSQL)', ()
     await prisma.account.upsert({
       where: { code: '1100' },
       update: {},
-      create: { id: INVESTOR_CASH_ACCOUNT_ID, code: '1100', name: 'Investor Cash Test Account', type: AccountType.ASSET, normalBalance: Direction.DEBIT },
+      create: {
+        id: INVESTOR_CASH_ACCOUNT_ID,
+        code: '1100',
+        name: 'Investor Cash Test Account',
+        type: AccountType.ASSET,
+        normalBalance: Direction.DEBIT,
+      },
     });
+
     await prisma.account.upsert({
       where: { code: '2100' },
       update: {},
-      create: { id: CUSTOMER_DEPOSITS_ACCOUNT_ID, code: '2100', name: 'Customer Deposits Test Account', type: AccountType.LIABILITY, normalBalance: Direction.CREDIT },
+      create: {
+        id: CUSTOMER_DEPOSITS_ACCOUNT_ID,
+        code: '2100',
+        name: 'Customer Deposits Test Account',
+        type: AccountType.LIABILITY,
+        normalBalance: Direction.CREDIT,
+      },
     });
+
     await prisma.user.createMany({
       data: [
         { id: investorId, email: `${investorId}@test.invalid`, passwordHash: 'test-hash', role: UserRole.INVESTOR },
@@ -36,10 +50,31 @@ describePrisma('Fortress Wallet Approval/Rejection Concurrency (PostgreSQL)', ()
         { id: complianceId, email: `${complianceId}@test.invalid`, passwordHash: 'test-hash', role: UserRole.COMPLIANCE_OFFICER },
       ],
     });
+
     await prisma.transaction.createMany({
       data: [
-        { id: approvalTransactionId, userId: investorId, type: TransactionType.DEPOSIT, status: TransactionStatus.PENDING, amountKobo: 5000n, currency: 'USD', reference: `${prefix}-approval-ref`, idempotencyKey: `${prefix}-approval-key`, metadata: { workflow: 'customer_deposit' } },
-        { id: rejectionTransactionId, userId: investorId, type: TransactionType.DEPOSIT, status: TransactionStatus.PENDING, amountKobo: 5000n, currency: 'USD', reference: `${prefix}-rejection-ref`, idempotencyKey: `${prefix}-rejection-key`, metadata: { workflow: 'customer_deposit' } },
+        {
+          id: approvalTransactionId,
+          userId: investorId,
+          type: TransactionType.DEPOSIT,
+          status: TransactionStatus.PENDING,
+          amountKobo: 5000n,
+          currency: 'USD',
+          reference: `${prefix}-approval-ref`,
+          idempotencyKey: `${prefix}-approval-key`,
+          metadata: { workflow: 'customer_deposit' },
+        },
+        {
+          id: rejectionTransactionId,
+          userId: investorId,
+          type: TransactionType.DEPOSIT,
+          status: TransactionStatus.PENDING,
+          amountKobo: 5000n,
+          currency: 'USD',
+          reference: `${prefix}-rejection-ref`,
+          idempotencyKey: `${prefix}-rejection-key`,
+          metadata: { workflow: 'customer_deposit' },
+        },
       ],
     });
   });
@@ -58,42 +93,66 @@ describePrisma('Fortress Wallet Approval/Rejection Concurrency (PostgreSQL)', ()
       service.confirmRequest(approvalTransactionId, superAdminId),
       service.confirmRequest(approvalTransactionId, complianceId),
     ]);
+
     const fulfilled = results.filter((result) => result.status === 'fulfilled');
     const rejected = results.filter((result) => result.status === 'rejected');
+
     if (fulfilled.length !== 1 || rejected.length !== 1) {
-      const reasons = results.map((result) => result.status === 'rejected' ? { status: result.status, message: result.reason instanceof Error ? result.reason.message : String(result.reason) } : { status: result.status });
+      const reasons = results.map((result) =>
+        result.status === 'rejected'
+          ? { status: result.status, message: result.reason instanceof Error ? result.reason.message : String(result.reason) }
+          : { status: result.status },
+      );
       throw new Error(`Unexpected concurrent approval outcomes: ${JSON.stringify(reasons)}`);
     }
+
     expect((rejected[0] as PromiseRejectedResult).reason.message).toContain('already being processed');
+
     const transaction = await prisma.transaction.findUniqueOrThrow({ where: { id: approvalTransactionId } });
     expect(transaction.status).toBe(TransactionStatus.COMPLETED);
     expect(transaction.journalEntryId).toBeTruthy();
-    const postedEntries = await prisma.journalEntry.findMany({ where: { idempotencyKey: `${`wallet:${prefix}-approval-key`}`, status: EntryStatus.POSTED }, include: { lines: true } });
+
+    const postedEntries = await prisma.journalEntry.findMany({
+      where: { idempotencyKey: `${`wallet:${prefix}-approval-key`}`, status: EntryStatus.POSTED },
+      include: { lines: true },
+    });
     expect(postedEntries).toHaveLength(1);
     expect(postedEntries[0].lines).toHaveLength(2);
     expect(postedEntries[0].createdByUserId).toBeDefined();
   });
 
-  it('allows concurrent approval and rejection to resolve the pending request exactly once', async () => {
+  it('allows exactly one concurrent operator rejection to cancel the wallet request', async () => {
     const service = new WalletService(prisma as any, {
       append: jest.fn().mockResolvedValue(undefined),
       appendInTransaction: jest.fn().mockResolvedValue(undefined),
     } as any, ledgerRepository);
+
     const results = await Promise.allSettled([
-      service.confirmRequest(rejectionTransactionId, superAdminId),
-      service.rejectRequest(rejectionTransactionId, complianceId, 'Operator rejection race'),
+      service.rejectRequest(rejectionTransactionId, superAdminId, 'Rejected by super admin'),
+      service.rejectRequest(rejectionTransactionId, complianceId, 'Rejected by compliance'),
     ]);
+
     const fulfilled = results.filter((result) => result.status === 'fulfilled');
     const rejected = results.filter((result) => result.status === 'rejected');
-    expect(fulfilled).toHaveLength(1);
-    expect(rejected).toHaveLength(1);
-    const transaction = await prisma.transaction.findUniqueOrThrow({ where: { id: rejectionTransactionId } });
-    expect([TransactionStatus.COMPLETED, TransactionStatus.CANCELLED]).toContain(transaction.status);
-    if (transaction.status === TransactionStatus.COMPLETED) {
-      expect(transaction.journalEntryId).toBeTruthy();
-      expect(await prisma.journalEntry.count({ where: { idempotencyKey: `${`wallet:${prefix}-rejection-key`}` } })).toBe(1);
-    } else {
-      expect(transaction.journalEntryId).toBeNull();
+
+    if (fulfilled.length !== 1 || rejected.length !== 1) {
+      const reasons = results.map((result) =>
+        result.status === 'rejected'
+          ? { status: result.status, message: result.reason instanceof Error ? result.reason.message : String(result.reason) }
+          : { status: result.status },
+      );
+      throw new Error(`Unexpected concurrent rejection outcomes: ${JSON.stringify(reasons)}`);
     }
+
+    expect((rejected[0] as PromiseRejectedResult).reason.message).toContain('already being processed');
+
+    const transaction = await prisma.transaction.findUniqueOrThrow({ where: { id: rejectionTransactionId } });
+    expect(transaction.status).toBe(TransactionStatus.CANCELLED);
+    expect(transaction.journalEntryId).toBeNull();
+
+    const postedEntries = await prisma.journalEntry.count({
+      where: { reference: `${prefix}-rejection-ref`, status: EntryStatus.POSTED },
+    });
+    expect(postedEntries).toBe(0);
   });
 });
