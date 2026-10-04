@@ -95,7 +95,7 @@ describe('TransfersService ledger integration', () => {
   });
 
   it('returns the existing transfer for an exact idempotency-key replay', async () => {
-    const { prisma } = makePrisma();
+    const { prisma, ledgerRepository } = makePrisma();
     const existing = { id: 'transfer-existing', status: 'COMPLETED', sourceUserId: 'user-a', destinationUserId: 'user-b', amountKobo: 10000n, currency: 'NGN', reference: 'TRF-1' };
     prisma.transfer.findUnique.mockResolvedValue(existing);
     const result = await new TransfersService(prisma as any, ledgerRepository as any).createTransfer(dto);
@@ -103,7 +103,7 @@ describe('TransfersService ledger integration', () => {
   });
 
   it('rejects an idempotency-key replay when any transfer request field changes', async () => {
-    const { prisma } = makePrisma();
+    const { prisma, ledgerRepository } = makePrisma();
     prisma.transfer.findUnique.mockResolvedValue({ id: 'transfer-existing', sourceUserId: 'user-a', destinationUserId: 'user-b', amountKobo: 10000n, currency: 'NGN', reference: 'TRF-1' });
     await expect(new TransfersService(prisma as any, ledgerRepository as any).createTransfer({ ...dto, amountKobo: '10001' })).rejects.toThrow('IDEMPOTENCY_CONFLICT');
     expect(prisma.$transaction).not.toHaveBeenCalled();
