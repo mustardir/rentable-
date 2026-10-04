@@ -1,5 +1,6 @@
 import { PrismaClient, EntryStatus, Direction, AccountType, UserRole } from '@prisma/client';
 import { TransfersService } from '../src/transfers/transfers.service';
+import { PrismaLedgerRepository } from '../src/ledger/prisma-ledger.repository';
 
 const prisma = new PrismaClient();
 const DATABASE_URL = process.env.DATABASE_URL;
@@ -81,7 +82,7 @@ describePrisma('Fortress Transfer Concurrency (PostgreSQL)', () => {
   });
 
   it('allows only one of two concurrent transfers to spend the exact same USD balance', async () => {
-    const service = new TransfersService(prisma as any);
+    const service = new TransfersService(prisma as any, new PrismaLedgerRepository(prisma as any));
 
     const initialLines = await prisma.journalLine.findMany({
       where: {

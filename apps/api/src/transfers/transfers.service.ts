@@ -2,6 +2,7 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { PostingEngine } from '@fortress/ledger-core';
 import { EntryStatus, TransactionStatus, TransactionType, TransferStatus, Prisma, UserRole } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { PrismaLedgerRepository } from '../ledger/prisma-ledger.repository';
 import type { CreateTransferDto } from './dto/create-transfer.dto';
 
 const CUSTOMER_DEPOSITS_ACCOUNT_ID = 'acct_2100';
@@ -11,7 +12,10 @@ type TransferTransactionClient = Prisma.TransactionClient;
 export class TransfersService {
   private readonly postingEngine = new PostingEngine();
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly ledgerRepository: PrismaLedgerRepository,
+  ) {}
 
   async createTransfer(dto: CreateTransferDto) {
     const currency = this.normalizeCurrency(dto.currency);
@@ -42,7 +46,11 @@ export class TransfersService {
       await this.lockSourceBalance(tx, dto.sourceUserId, currency);
       await this.assertSufficientBalance(tx, dto.sourceUserId, currency, amountKobo);
       const transaction = await tx.transaction.create({ data: { userId: dto.sourceUserId, type: TransactionType.TRANSFER, status: TransactionStatus.PROCESSING, amountKobo, currency, reference, idempotencyKey: dto.idempotencyKey, metadata: { sourceUserId: dto.sourceUserId, destinationUserId: dto.destinationUserId } } });
-      const journalEntry = await tx.journalEntry.create({ data: { id: entryResult.value.id, idempotencyKey: entryResult.value.idempotencyKey, reference, description: `Transfer ${reference}`, currency, status: 'POSTED', postedAt: entryResult.value.postedAt, metadata: { transactionId: transaction.id, sourceUserId: dto.sourceUserId, destinationUserId: dto.destinationUserId }, createdAt: entryResult.value.createdAt, lines: { create: entryResult.value.lines.map((line) => ({ id: line.id, accountId: line.accountId, currency, direction: line.direction, amountKobo: line.amountKobo, metadata: line.metadata, createdAt: line.createdAt })) } }, include: { lines: true } });
+      const journalEntry = await this.ledgerRepository.saveEntry(entryResult.value, tx, {
+        reference,
+        description: `Transfer ${reference}`,
+        metadata: { transactionId: transaction.id, sourceUserId: dto.sourceUserId, destinationUserId: dto.destinationUserId },
+      });
       await tx.transaction.update({ where: { id: transaction.id }, data: { status: TransactionStatus.COMPLETED, journalEntryId: journalEntry.id, completedAt: new Date() } });
       return tx.transfer.create({ data: { sourceUserId: dto.sourceUserId, destinationUserId: dto.destinationUserId, status: TransferStatus.COMPLETED, amountKobo, currency, reference, idempotencyKey: dto.idempotencyKey, journalEntryId: journalEntry.id, metadata: { transactionId: transaction.id }, completedAt: new Date() }, include: { journalEntry: { include: { lines: true } } } });
     });

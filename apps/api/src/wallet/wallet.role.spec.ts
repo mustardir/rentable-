@@ -8,6 +8,7 @@ describe('WalletService investor request authorization', () => {
     transaction: { findUnique: jest.fn(), create: jest.fn() },
   } as any;
   const audit = { append: jest.fn() } as any;
+  const ledgerRepository = { saveEntry: jest.fn() } as any;
 
   beforeEach(() => jest.clearAllMocks());
 
@@ -16,7 +17,7 @@ describe('WalletService investor request authorization', () => {
     prisma.transaction.findUnique.mockResolvedValue(null);
     prisma.transaction.create.mockResolvedValue({ id: 'tx-1', status: 'PENDING' });
 
-    await expect(new WalletService(prisma, audit).createDepositRequest('investor-1', {
+    await expect(new WalletService(prisma, audit, ledgerRepository).createDepositRequest('investor-1', {
       amountKobo: '1000',
       idempotencyKey: 'dep-investor-1',
       currency: 'USD',
@@ -26,7 +27,7 @@ describe('WalletService investor request authorization', () => {
   it('rejects a portfolio manager from creating a deposit request', async () => {
     prisma.user.findUnique.mockResolvedValue({ id: 'manager-1', isActive: true, role: UserRole.PORTFOLIO_MANAGER });
 
-    await expect(new WalletService(prisma, audit).createDepositRequest('manager-1', {
+    await expect(new WalletService(prisma, audit, ledgerRepository).createDepositRequest('manager-1', {
       amountKobo: '1000',
       idempotencyKey: 'dep-manager-1',
       currency: 'USD',
@@ -37,7 +38,7 @@ describe('WalletService investor request authorization', () => {
   it('rejects a compliance officer from creating a withdrawal request', async () => {
     prisma.user.findUnique.mockResolvedValue({ id: 'compliance-1', isActive: true, role: UserRole.COMPLIANCE_OFFICER });
 
-    await expect(new WalletService(prisma, audit).createWithdrawalRequest('compliance-1', {
+    await expect(new WalletService(prisma, audit, ledgerRepository).createWithdrawalRequest('compliance-1', {
       amountKobo: '1000',
       idempotencyKey: 'wdr-compliance-1',
       currency: 'USD',

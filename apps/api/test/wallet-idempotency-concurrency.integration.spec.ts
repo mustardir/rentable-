@@ -2,16 +2,19 @@ import { BadRequestException } from '@nestjs/common';
 import { TransactionType, UserRole } from '@prisma/client';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { WalletService } from '../src/wallet/wallet.service';
+import { PrismaLedgerRepository } from '../src/ledger/prisma-ledger.repository';
 
 describe('WalletService idempotency concurrency', () => {
   let prisma: PrismaService;
   let service: WalletService;
   let investorId: string;
+  let ledgerRepository: PrismaLedgerRepository;
 
   beforeAll(async () => {
     prisma = new PrismaService();
     await prisma.$connect();
-    service = new WalletService(prisma, { append: jest.fn() } as any);
+    ledgerRepository = new PrismaLedgerRepository(prisma);
+    service = new WalletService(prisma, { append: jest.fn() } as any, ledgerRepository);
     const investor = await prisma.user.findFirst({ where: { role: UserRole.INVESTOR, isActive: true }, select: { id: true } });
     if (!investor) throw new Error('No active investor fixture available');
     investorId = investor.id;

@@ -1,9 +1,11 @@
 import { PrismaClient, AccountType, Direction, EntryStatus, TransactionStatus, TransactionType, UserRole } from '@prisma/client';
 import { WalletService } from '../src/wallet/wallet.service';
+import { PrismaLedgerRepository } from '../src/ledger/prisma-ledger.repository';
 
 const prisma = new PrismaClient();
 const DATABASE_URL = process.env.DATABASE_URL;
 const describePrisma = DATABASE_URL ? describe : describe.skip;
+const ledgerRepository = new PrismaLedgerRepository(prisma as any);
 
 const INVESTOR_CASH_ACCOUNT_ID = 'acct_1100';
 const CUSTOMER_DEPOSITS_ACCOUNT_ID = 'acct_2100';
@@ -111,7 +113,7 @@ describePrisma('Fortress Wallet Concurrency (PostgreSQL)', () => {
     const service = new WalletService(prisma as any, {
       append: jest.fn().mockResolvedValue(undefined),
       appendInTransaction: jest.fn().mockResolvedValue(undefined),
-    } as any);
+    } as any, ledgerRepository);
 
     const initialLines = await prisma.journalLine.findMany({
       where: {
