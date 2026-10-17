@@ -31,6 +31,15 @@ A fiat amount is:
 FiatMoney = { currency: ISO4217, amountMinor: bigint }
 ```
 
+Example JSON (FiatMoney) — the platform stores fiat as integer minor units in the product currency:
+
+```json
+{
+  "currency": "USD",
+  "amountMinor": 5000
+}
+```
+
 The minor-unit scale comes from the currency, not from a global NGN assumption. Examples:
 
 | Currency | Minor unit | Example |
@@ -49,6 +58,18 @@ CryptoAmount = {
   amountBase: bigint
 }
 ```
+
+Example JSON (CryptoAmount) — quantities are stored in the asset's base unit (e.g., satoshis for BTC):
+
+```json
+{
+  "asset": "BTC",
+  "network": "bitcoin",
+  "amountBase": 150000000
+}
+```
+
+(Here `150000000` satoshis = 1.5 BTC.)
 
 For example, BTC and ETH quantities are represented in their smallest supported base unit rather than as JavaScript floating-point numbers. The exact asset precision is defined by the supported asset/network registry.
 
