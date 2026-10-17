@@ -1,5 +1,9 @@
 # Fortress Fund – Domain Model v2
 
+## TL;DR
+
+All fiat amounts are stored as integer minor units with an explicit ISO 4217 currency (e.g. `{ "currency": "USD", "amountMinor": 5000 }` means $50.00). Product minimums are enforced in the product currency (initial Fortress Investment minimum = USD 5_000 minor units = $50.00). Crypto amounts are stored as integer base units with explicit asset and network (e.g. `{ "asset":"BTC", "network":"bitcoin", "amountBase":150000000 }`). No floating-point arithmetic for persisted financial values; explicit exchange/quote boundaries required for conversions.
+
 > **Status: DRAFT FOR REVIEW**  
 > **Supersedes:** `docs/domain-model-v1.md` for new multi-country functionality.  
 > The v1 document remains frozen and unchanged.
