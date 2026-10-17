@@ -1,0 +1,60 @@
+name: Ledger Integrity Integration
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ledger-integrity:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: fortress
+          POSTGRES_PASSWORD: fortress
+          POSTGRES_DB: fortress_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U fortress -d fortress_test"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+    env:
+      DATABASE_URL: postgresql://fortress:fortress@localhost:5432/fortress_test?schema=public
+      NODE_ENV: test
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.17.1
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm --filter @fortress-fund/api prisma:generate
+
+      - name: Apply database migrations
+        run: pnpm --filter @fortress-fund/api prisma:migrate:deploy
+
+      - name: Run ledger immutability integration tests
+        run: pnpm --filter @fortress-fund/api exec jest --config jest.integration.config.cjs --runInBand

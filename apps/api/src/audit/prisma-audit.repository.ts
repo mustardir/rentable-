@@ -12,59 +12,61 @@ export class PrismaAuditRepository implements AuditRepository {
   constructor(private readonly prisma: PrismaService) {}
 
   async append(input: AuditEventInput): Promise<AuditEvent> {
+    return this.prisma.$transaction((tx) => this.appendInTransaction(tx, input));
+  }
+
+  async appendInTransaction(tx: Prisma.TransactionClient, input: AuditEventInput): Promise<AuditEvent> {
     if (!input.eventType || !input.entityType || !input.entityId) {
       throw new Error('INVALID_AUDIT_EVENT');
     }
 
-    return this.prisma.$transaction(async (tx) => {
-      const [{ sequence }] = await tx.$queryRaw<Array<{ sequence: bigint }>>`
-        SELECT nextval(pg_get_serial_sequence('"AuditEvent"', 'sequence'))::bigint AS sequence
-      `;
+    const [{ sequence }] = await tx.$queryRaw<Array<{ sequence: bigint }>>`
+      SELECT nextval(pg_get_serial_sequence('"AuditEvent"', 'sequence'))::bigint AS sequence
+    `;
 
-      const previous = await tx.auditEvent.findFirst({
-        where: {
-          entityType: input.entityType,
-          entityId: input.entityId,
-        },
-        orderBy: { sequence: 'desc' },
-        select: { hash: true },
-      });
-
-      const previousHash = previous?.hash ?? null;
-      const payload = structuredClone(input.payload) as JsonValue;
-      const createdAt = new Date(input.createdAt?.getTime() ?? Date.now());
-      const draft = {
-        id: randomUUID(),
-        sequence,
-        actorUserId: input.actorUserId ?? null,
-        actorRole: input.actorRole ?? null,
-        eventType: input.eventType,
+    const previous = await tx.auditEvent.findFirst({
+      where: {
         entityType: input.entityType,
         entityId: input.entityId,
-        payload,
-        previousHash,
-        createdAt,
-      };
-      const hash = computeAuditHash(draft);
-
-      const row = await tx.auditEvent.create({
-        data: {
-          id: draft.id,
-          sequence: draft.sequence,
-          actorUserId: draft.actorUserId,
-          actorRole: draft.actorRole,
-          eventType: draft.eventType,
-          entityType: draft.entityType,
-          entityId: draft.entityId,
-          payload: payload as Prisma.InputJsonValue,
-          previousHash: draft.previousHash,
-          hash,
-          createdAt: draft.createdAt,
-        },
-      });
-
-      return this.toAuditEvent(row);
+      },
+      orderBy: { sequence: 'desc' },
+      select: { hash: true },
     });
+
+    const previousHash = previous?.hash ?? null;
+    const payload = structuredClone(input.payload) as JsonValue;
+    const createdAt = new Date(input.createdAt?.getTime() ?? Date.now());
+    const draft = {
+      id: randomUUID(),
+      sequence,
+      actorUserId: input.actorUserId ?? null,
+      actorRole: input.actorRole ?? null,
+      eventType: input.eventType,
+      entityType: input.entityType,
+      entityId: input.entityId,
+      payload,
+      previousHash,
+      createdAt,
+    };
+    const hash = computeAuditHash(draft);
+
+    const row = await tx.auditEvent.create({
+      data: {
+        id: draft.id,
+        sequence: draft.sequence,
+        actorUserId: draft.actorUserId,
+        actorRole: draft.actorRole,
+        eventType: draft.eventType,
+        entityType: draft.entityType,
+        entityId: draft.entityId,
+        payload: payload as Prisma.InputJsonValue,
+        previousHash: draft.previousHash,
+        hash,
+        createdAt: draft.createdAt,
+      },
+    });
+
+    return this.toAuditEvent(row);
   }
 
   async all(): Promise<readonly AuditEvent[]> {

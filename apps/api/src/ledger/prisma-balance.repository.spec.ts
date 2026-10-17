@@ -25,11 +25,11 @@ describe('PrismaBalanceRepository', () => {
     ]);
 
     const repository = new PrismaBalanceRepository(prisma);
-    const balance = await repository.getInvestorBalance('acct-2100', 'user-a');
+    const balance = await repository.getInvestorBalance('acct-2100', 'user-a', 'USD');
 
     expect(balance).toBe(10000n);
     expect(prisma.journalEntry.findMany).toHaveBeenCalledWith({
-      where: { status: 'POSTED' },
+      where: { status: 'POSTED', currency: 'USD' },
       include: { lines: true },
       orderBy: { createdAt: 'asc' },
     });

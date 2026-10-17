@@ -20,7 +20,7 @@ async function postEntry(
   key: string,
   lines: Parameters<PostingEngine["buildEntry"]>[0]["lines"]
 ) {
-  const r = await engine.post({ idempotencyKey: key, lines }, repo);
+  const r = await engine.post({ idempotencyKey: key, currency: "USD", lines }, repo);
   if (!r.ok) throw new Error(r.error.message);
   return r.value;
 }
@@ -75,6 +75,7 @@ describe("BalanceService.getAccountBalance", () => {
     const pendingEntry: JournalEntry = {
       id: "fake-pending",
       idempotencyKey: "pending-key",
+      currency: "USD",
       status: "PENDING",
       lines: [
         {
@@ -108,6 +109,7 @@ describe("BalanceService.getAccountBalance", () => {
     const entry: JournalEntry = {
       id: "fake-1",
       idempotencyKey: "uk-1",
+      currency: "USD",
       status: "POSTED",
       lines: [
         {
@@ -243,6 +245,7 @@ describe("BalanceService.getInvestorBalance", () => {
     const entry: JournalEntry = {
       id: "fake-inv",
       idempotencyKey: "uk-inv-1",
+      currency: "USD",
       status: "POSTED",
       lines: [
         {

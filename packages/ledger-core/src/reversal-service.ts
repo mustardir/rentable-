@@ -70,6 +70,7 @@ export class ReversalService {
     const reversalEntry: JournalEntry = Object.freeze({
       id: reversalId,
       idempotencyKey,
+      currency: original.currency,
       status: "POSTED",
       lines: Object.freeze(mirroredLines),
       postedAt: now,

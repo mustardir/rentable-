@@ -5,6 +5,8 @@
 > No structural changes may be made without a new versioned document and an
 > Architecture Decision Record (ADR).
 
+> Note: For multi-country and USD/crypto product work, see the v2 model: `docs/domain-model-v2.md` — this v1 document is frozen for historical/reference purposes.
+
 ---
 
 ## Engineering Constitution (summary)

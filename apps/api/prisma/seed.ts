@@ -1,4 +1,4 @@
-import { AccountType, Direction, PrismaClient, Role, KYCLevel, KYCStatus } from '@prisma/client';
+import { AccountType, Direction, PrismaClient, UserRole, KYCLevel, KYCStatus } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
@@ -16,7 +16,7 @@ async function main() {
     create: {
       email: adminEmail,
       passwordHash,
-      role: Role.ADMIN,
+      role: UserRole.SUPER_ADMIN,
       profile: {
         create: {
           firstName: 'Fortress',
@@ -33,7 +33,7 @@ async function main() {
     create: {
       email: complianceEmail,
       passwordHash,
-      role: Role.COMPLIANCE,
+      role: UserRole.COMPLIANCE_OFFICER,
       profile: {
         create: {
           firstName: 'Fortress',
@@ -50,7 +50,7 @@ async function main() {
     create: {
       email: userEmail,
       passwordHash,
-      role: Role.USER,
+      role: UserRole.INVESTOR,
       profile: {
         create: {
           firstName: 'Demo',
@@ -88,7 +88,6 @@ async function main() {
     ],
     skipDuplicates: true,
   });
-
 
   const accounts = [
     { id: 'acct_1000', code: '1000', name: 'Assets', type: AccountType.ASSET, normalBalance: Direction.DEBIT, description: 'Top-level asset category' },

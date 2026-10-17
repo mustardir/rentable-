@@ -20,6 +20,7 @@ describePrisma('PrismaLedgerRepository concurrent idempotency', () => {
     return {
       id,
       idempotencyKey: key,
+      currency: 'USD',
       status: 'POSTED',
       postedAt: now,
       createdAt: now,
@@ -41,9 +42,26 @@ describePrisma('PrismaLedgerRepository concurrent idempotency', () => {
   });
 
   afterAll(async () => {
-    await prisma.journalLine.deleteMany({ where: { accountId: { in: accountIds } } });
-    await prisma.account.deleteMany({ where: { id: { in: accountIds } } });
+    // Journal records are immutable and intentionally remain in this ephemeral test database.
     await prisma.$disconnect();
+  });
+
+  it('preserves workflow persistence metadata while saving a ledger entry', async () => {
+    const key = `${prefix}-metadata-key`;
+    const created = entry(`${prefix}-metadata-entry`, key);
+    const saved = await repository.saveEntry(created, undefined as never, {
+      reference: `${prefix}-reference`,
+      description: 'Transfer metadata test',
+      metadata: { workflow: 'transfer', transactionId: `${prefix}-transaction` },
+    });
+
+    expect(saved.id).toBe(created.id);
+    const persisted = await prisma.journalEntry.findUnique({ where: { idempotencyKey: key } });
+    expect(persisted).toMatchObject({
+      reference: `${prefix}-reference`,
+      description: 'Transfer metadata test',
+      metadata: { workflow: 'transfer', transactionId: `${prefix}-transaction` },
+    });
   });
 
   it('returns one authoritative entry for concurrent duplicate idempotency keys', async () => {

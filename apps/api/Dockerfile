@@ -7,7 +7,7 @@ FROM base AS deps
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/api/package.json ./apps/api/package.json
 RUN corepack enable && corepack prepare pnpm@9.12.1 --activate
-RUN pnpm install --filter @fortress-fund/api... --frozen-lockfile=false
+RUN pnpm install --filter @fortress-fund/api... --frozen-lockfile
 
 FROM deps AS build
 COPY . .

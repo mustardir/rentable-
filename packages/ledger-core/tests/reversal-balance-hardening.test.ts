@@ -6,7 +6,7 @@ import { InMemoryRepository } from "../src/repository.js";
 import type { JournalEntry } from "../src/journal-entry.js";
 
 async function postDeposit(engine: PostingEngine, repo: InMemoryRepository, key: string, amountKobo: bigint) {
-  const result = await engine.post({ idempotencyKey: key, lines: [
+  const result = await engine.post({ idempotencyKey: key, currency: "USD", lines: [
     { accountId: "acct_1100", direction: "DEBIT", amountKobo },
     { accountId: "acct_2100", direction: "CREDIT", amountKobo, metadata: { investorId: "investor-1" } },
   ] }, repo);
@@ -30,7 +30,7 @@ describe("balance derivation and reversal invariants", () => {
   it("ignores a non-POSTED entry even when its lines contain reversal metadata", () => {
     const balanceService = new BalanceService();
     const pending: JournalEntry = {
-      id: "pending-reversal", idempotencyKey: "pending-reversal-key", status: "PENDING", reversalOfId: "some-original",
+      id: "pending-reversal", idempotencyKey: "pending-reversal-key", currency: "USD", status: "PENDING", reversalOfId: "some-original",
       lines: [{ id: "pending-line", journalEntryId: "pending-reversal", accountId: "acct_1100", direction: "DEBIT", amountKobo: 900_000n as any, metadata: {}, createdAt: new Date() }],
       postedAt: new Date(), createdAt: new Date(),
     };

@@ -57,6 +57,9 @@ importers:
       '@fortress/audit-core':
         specifier: workspace:*
         version: link:../../packages/audit-core
+      '@fortress/document-core':
+        specifier: workspace:*
+        version: link:../../packages/document-core
       '@fortress/ledger-core':
         specifier: workspace:*
         version: link:../../packages/ledger-core
@@ -271,6 +274,12 @@ importers:
   packages/config: {}
 
   packages/database: {}
+
+  packages/document-core:
+    devDependencies:
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
 
   packages/ledger-core:
     devDependencies:

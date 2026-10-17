@@ -4,30 +4,44 @@ import type { JournalEntry, JournalLine, Repository } from '@fortress/ledger-cor
 import { PrismaService } from '../prisma/prisma.service';
 
 type PrismaTransaction = Prisma.TransactionClient;
+
+type LedgerPersistenceOptions = {
+  reference?: string;
+  description?: string;
+  metadata?: Prisma.InputJsonValue;
+  createdByUserId?: string;
+};
+
 type JournalEntryWithLines = Prisma.JournalEntryGetPayload<{ include: { lines: true } }>;
 
 @Injectable()
 export class PrismaLedgerRepository implements Repository {
   constructor(private readonly prisma: PrismaService) {}
 
-  async saveEntry(entry: JournalEntry, tx: PrismaTransaction | PrismaService = this.prisma): Promise<JournalEntry> {
+  async saveEntry(entry: JournalEntry, tx: PrismaTransaction | PrismaService = this.prisma, options?: LedgerPersistenceOptions): Promise<JournalEntry> {
+    const currency = entry.currency?.trim().toUpperCase();
+    if (!currency || !/^[A-Z]{3}$/.test(currency)) throw new Error('LEDGER_ENTRY_CURRENCY_REQUIRED');
+
     try {
       await tx.journalEntry.create({
         data: {
           id: entry.id,
           idempotencyKey: entry.idempotencyKey,
-          reference: entry.idempotencyKey,
-          description: `Journal entry ${entry.idempotencyKey}`,
-          currency: 'NGN',
+          reference: options?.reference ?? entry.idempotencyKey,
+          description: options?.description ?? `Journal entry ${entry.idempotencyKey}`,
+          currency,
           status: entry.status as EntryStatus,
           postedAt: entry.postedAt,
           reversalOfId: entry.reversalOfId,
           reversedById: entry.reversedById,
+          metadata: options?.metadata,
+          createdByUserId: options?.createdByUserId,
           createdAt: entry.createdAt,
           lines: {
             create: entry.lines.map((line) => ({
               id: line.id,
               accountId: line.accountId,
+              currency,
               direction: line.direction,
               amountKobo: line.amountKobo,
               metadata: line.metadata as Prisma.InputJsonValue,
@@ -97,6 +111,7 @@ export class PrismaLedgerRepository implements Repository {
     return Object.freeze({
       id: entry.id,
       idempotencyKey: entry.idempotencyKey,
+      currency: entry.currency,
       status: entry.status === EntryStatus.DRAFT ? 'PENDING' : entry.status,
       lines: Object.freeze(lines),
       postedAt: entry.postedAt,

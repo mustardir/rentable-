@@ -46,7 +46,7 @@ function parseAmountKobo(raw: bigint | number): Result<Kobo, JournalError> {
 
 export class PostingEngine {
   buildEntry(command: PostCommand): Result<JournalEntry, JournalError> {
-    const { idempotencyKey, lines: rawLines, postedAt } = command;
+    const { idempotencyKey, currency, lines: rawLines, postedAt } = command;
 
     if (!rawLines || rawLines.length < 2) {
       return err({ kind: "EMPTY_LINES", message: "A journal entry requires at least 2 lines (one debit, one credit)" });
@@ -90,6 +90,7 @@ export class PostingEngine {
     return ok(Object.freeze({
       id: entryId,
       idempotencyKey,
+      currency,
       status: "POSTED",
       lines: Object.freeze(parsedLines),
       postedAt: timestamp,

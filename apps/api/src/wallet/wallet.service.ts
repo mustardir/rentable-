@@ -1,0 +1,122 @@
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { PostingEngine } from '@fortress/ledger-core';
+import { EntryStatus, Prisma, TransactionStatus, TransactionType, UserRole } from '@prisma/client';
+import { PrismaService } from '../prisma/prisma.service';
+import { PrismaAuditRepository } from '../audit/prisma-audit.repository';
+import { PrismaLedgerRepository } from '../ledger/prisma-ledger.repository';
+import type { CreateWalletRequestDto } from './dto/create-wallet-request.dto';
+
+const INVESTOR_CASH_ACCOUNT_ID = 'acct_1100';
+const CUSTOMER_DEPOSITS_ACCOUNT_ID = 'acct_2100';
+type WalletTransactionClient = Prisma.TransactionClient;
+
+@Injectable()
+export class WalletService {
+  private readonly postingEngine = new PostingEngine();
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly audit: PrismaAuditRepository,
+    private readonly ledgerRepository: PrismaLedgerRepository,
+  ) {}
+
+  async getOperatorRequests(limit = 50) { return this.prisma.transaction.findMany({ where: { type: { in: [TransactionType.DEPOSIT, TransactionType.WITHDRAWAL] }, status: TransactionStatus.PENDING }, orderBy: { createdAt: 'asc' }, take: Math.min(100, Math.max(1, limit)), select: { id: true, type: true, status: true, amountKobo: true, currency: true, reference: true, idempotencyKey: true, journalEntryId: true, completedAt: true, createdAt: true, user: { select: { id: true, email: true, profile: { select: { firstName: true, lastName: true } } } } } }); }
+  forbiddenOperator(): never { throw new ForbiddenException('Only an active admin or compliance user can access wallet approvals'); }
+  async createDepositRequest(userId: string, dto: CreateWalletRequestDto) { await this.assertActiveUser(userId); return this.createRequest(userId, dto, TransactionType.DEPOSIT); }
+  async createWithdrawalRequest(userId: string, dto: CreateWalletRequestDto) { await this.assertActiveUser(userId); return this.createRequest(userId, dto, TransactionType.WITHDRAWAL); }
+
+  private async createRequest(userId: string, dto: CreateWalletRequestDto, type: TransactionType) {
+    const amountKobo = this.parseAmountKobo(dto.amountKobo);
+    const currency = this.normalizeCurrency(dto.currency);
+    const reference = dto.reference ?? `${type === TransactionType.DEPOSIT ? 'DEP' : 'WDR'}-${dto.idempotencyKey}`;
+    const existing = await this.prisma.transaction.findUnique({ where: { idempotencyKey: dto.idempotencyKey } });
+    if (existing) {
+      this.assertIdempotentReplay(existing, userId, type, amountKobo, currency, reference);
+      return existing;
+    }
+    try {
+      return await this.prisma.transaction.create({ data: { userId, type, status: TransactionStatus.PENDING, amountKobo, currency, reference, idempotencyKey: dto.idempotencyKey, metadata: { workflow: type === TransactionType.DEPOSIT ? 'customer_deposit' : 'customer_withdrawal' } } });
+    } catch (error) {
+      if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== 'P2002') throw error;
+      const target = Array.isArray(error.meta?.target) ? error.meta.target.map(String) : typeof error.meta?.target === 'string' ? [error.meta.target] : [];
+      if (!target.includes('idempotencyKey') && !target.includes('reference')) throw error;
+      const concurrent = await this.prisma.transaction.findUnique({ where: { idempotencyKey: dto.idempotencyKey } });
+      if (concurrent) {
+        this.assertIdempotentReplay(concurrent, userId, type, amountKobo, currency, reference);
+        return concurrent;
+      }
+      if (target.includes('reference')) {
+        const conflictingReference = await this.prisma.transaction.findUnique({ where: { reference } });
+        if (conflictingReference) {
+          this.assertIdempotentReplay(conflictingReference, userId, type, amountKobo, currency, reference);
+          return conflictingReference;
+        }
+      }
+      throw error;
+    }
+  }
+
+  private assertIdempotentReplay(existing: { userId: string; type: TransactionType; amountKobo: bigint; currency: string; reference: string }, userId: string, type: TransactionType, amountKobo: bigint, currency: string, reference: string) {
+    if (existing.userId !== userId || existing.type !== type || existing.amountKobo !== amountKobo || existing.currency !== currency || existing.reference !== reference) throw new BadRequestException('IDEMPOTENCY_CONFLICT');
+  }
+
+  async confirmRequest(transactionId: string, adminUserId: string) {
+    const admin = await this.requireOperator(adminUserId);
+    return this.prisma.$transaction(async (tx) => {
+      const transaction = await tx.transaction.findUnique({ where: { id: transactionId } });
+      if (!transaction) throw new NotFoundException('Wallet transaction not found');
+      if (transaction.status === TransactionStatus.COMPLETED) throw new BadRequestException('Transaction is already being processed');
+      if (transaction.status !== TransactionStatus.PENDING) throw new BadRequestException(`Transaction cannot be confirmed from status ${transaction.status}`);
+      const claimed = await tx.transaction.updateMany({ where: { id: transaction.id, status: TransactionStatus.PENDING }, data: { status: TransactionStatus.PROCESSING } });
+      if (claimed.count !== 1) throw new BadRequestException('Transaction is already being processed');
+      await this.lockBalance(tx, transaction.userId, transaction.currency);
+      if (transaction.type === TransactionType.WITHDRAWAL) await this.assertSufficientBalance(tx, transaction.userId, transaction.currency, transaction.amountKobo);
+      const entryResult = this.postingEngine.buildEntry({ idempotencyKey: `wallet:${transaction.idempotencyKey}`, currency: transaction.currency, lines: transaction.type === TransactionType.DEPOSIT ? [{ accountId: INVESTOR_CASH_ACCOUNT_ID, direction: 'DEBIT', amountKobo: transaction.amountKobo, metadata: { investorId: transaction.userId, transactionType: 'DEPOSIT', reference: transaction.reference } }, { accountId: CUSTOMER_DEPOSITS_ACCOUNT_ID, direction: 'CREDIT', amountKobo: transaction.amountKobo, metadata: { investorId: transaction.userId, transactionType: 'DEPOSIT', reference: transaction.reference } }] : [{ accountId: CUSTOMER_DEPOSITS_ACCOUNT_ID, direction: 'DEBIT', amountKobo: transaction.amountKobo, metadata: { investorId: transaction.userId, transactionType: 'WITHDRAWAL', reference: transaction.reference } }, { accountId: INVESTOR_CASH_ACCOUNT_ID, direction: 'CREDIT', amountKobo: transaction.amountKobo, metadata: { investorId: transaction.userId, transactionType: 'WITHDRAWAL', reference: transaction.reference } }] });
+      if (!entryResult.ok) throw new BadRequestException(entryResult.error.message);
+      const journalEntry = await this.ledgerRepository.saveEntry(entryResult.value, tx, {
+        reference: transaction.reference,
+        description: `${transaction.type === TransactionType.DEPOSIT ? 'Deposit' : 'Withdrawal'} ${transaction.reference}`,
+        metadata: { transactionId: transaction.id, confirmedByUserId: adminUserId },
+        createdByUserId: adminUserId,
+      });
+      const updated = await tx.transaction.update({ where: { id: transaction.id }, data: { status: TransactionStatus.COMPLETED, journalEntryId: journalEntry.id, completedAt: new Date(), metadata: { workflow: transaction.type === TransactionType.DEPOSIT ? 'customer_deposit' : 'customer_withdrawal', confirmedByUserId: adminUserId } } });
+      await this.audit.appendInTransaction(tx, { actorUserId: admin.id, actorRole: admin.role, eventType: 'WALLET_REQUEST_APPROVED', entityType: 'Transaction', entityId: updated.id, payload: { transactionId: updated.id, reference: updated.reference, type: updated.type, amountKobo: updated.amountKobo.toString(), currency: updated.currency } });
+      return updated;
+    });
+  }
+
+  async rejectRequest(transactionId: string, adminUserId: string, reason?: string) {
+    const admin = await this.requireOperator(adminUserId);
+    const normalizedReason = reason?.trim() || 'Rejected by operator';
+    return this.prisma.$transaction(async (tx) => {
+      const transaction = await tx.transaction.findUnique({ where: { id: transactionId } });
+      if (!transaction) throw new NotFoundException('Wallet transaction not found');
+      if (transaction.status === TransactionStatus.CANCELLED) throw new BadRequestException('Transaction is already being processed');
+      if (transaction.status !== TransactionStatus.PENDING) throw new BadRequestException(`Transaction cannot be rejected from status ${transaction.status}`);
+      const updated = await tx.transaction.updateMany({ where: { id: transaction.id, status: TransactionStatus.PENDING }, data: { status: TransactionStatus.CANCELLED, metadata: { workflow: transaction.type === TransactionType.DEPOSIT ? 'customer_deposit' : 'customer_withdrawal', rejectedByUserId: adminUserId, rejectionReason: normalizedReason } } });
+      if (updated.count !== 1) throw new BadRequestException('Transaction is already being processed');
+      const cancelled = await tx.transaction.findUniqueOrThrow({ where: { id: transaction.id } });
+      await this.audit.appendInTransaction(tx, { actorUserId: admin.id, actorRole: admin.role, eventType: 'WALLET_REQUEST_REJECTED', entityType: 'Transaction', entityId: cancelled.id, payload: { transactionId: cancelled.id, reference: cancelled.reference, type: cancelled.type, amountKobo: cancelled.amountKobo.toString(), currency: cancelled.currency, reason: normalizedReason } });
+      return cancelled;
+    });
+  }
+
+  private async requireOperator(userId: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user || !user.isActive || (user.role !== UserRole.SUPER_ADMIN && user.role !== UserRole.COMPLIANCE_OFFICER)) throw new ForbiddenException('Only an active admin or compliance user can perform wallet approvals');
+    return user;
+  }
+  private async lockBalance(tx: WalletTransactionClient, userId: string, currency: string) { await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`transfer:${userId}:${currency}`}, 0))::text`; }
+  private async assertSufficientBalance(tx: WalletTransactionClient, userId: string, currency: string, amountKobo: bigint) {
+    const lines = await tx.journalLine.findMany({ where: { accountId: CUSTOMER_DEPOSITS_ACCOUNT_ID, metadata: { path: ['investorId'], equals: userId }, journalEntry: { status: EntryStatus.POSTED, currency } }, select: { direction: true, amountKobo: true } });
+    let availableKobo = 0n;
+    for (const line of lines) availableKobo += line.direction === 'CREDIT' ? line.amountKobo : -line.amountKobo;
+    if (availableKobo < amountKobo) throw new BadRequestException('Insufficient available balance');
+  }
+  private async assertActiveUser(userId: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { id: true, isActive: true, role: true } });
+    if (!user || !user.isActive) throw new NotFoundException('Investor not found');
+    if (user.role !== UserRole.INVESTOR) throw new ForbiddenException('Only investors can create wallet requests');
+  }
+  private normalizeCurrency(currency?: string): string { const normalized = currency?.trim().toUpperCase(); if (normalized === undefined || !/^[A-Z]{3}$/.test(normalized)) throw new BadRequestException('INVALID_CURRENCY'); return normalized; }
+  private parseAmountKobo(value: string): bigint { if (!/^\d+$/.test(value)) throw new BadRequestException('amountKobo must be a positive integer string'); const amount = BigInt(value); if (amount <= 0n) throw new BadRequestException('amountKobo must be greater than 0'); return amount; }
+}

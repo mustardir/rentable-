@@ -8,7 +8,7 @@ module.exports = {
     '^.+\\.ts$': 'ts-jest',
   },
   moduleNameMapper: {
-    '^(.+)\\.js$': '$1',
+    '^(.{1,2}/.*)\\.js$': '$1',
   },
   testTimeout: 30000,
 };
