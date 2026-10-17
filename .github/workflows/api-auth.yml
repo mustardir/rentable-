@@ -64,10 +64,14 @@ jobs:
           pnpm --filter @fortress-fund/api exec node -p "require('@nestjs/platform-express/package.json').version"
 
       - name: Generate Prisma client
-        run: pnpm --filter @fortress-fund/api prisma:generate
+        run: |
+          cd apps/api
+          npx prisma generate --schema=prisma/schema.prisma
 
       - name: Apply Prisma migrations
-        run: pnpm --filter @fortress-fund/api prisma:migrate:deploy
+        run: |
+          cd apps/api
+          npx prisma migrate deploy --schema=prisma/schema.prisma
 
       - name: Build API
         run: pnpm --filter @fortress-fund/api build
@@ -115,7 +119,7 @@ jobs:
         run: pnpm --filter @fortress-fund/api test -- --runInBand test/investment-redemption-concurrency.integration.spec.ts
 
       - name: Run financial product and DOCX unit tests
-        run: pnpm --filter @fortress-fund/api test:vitest test/financial-product.defaults.spec.ts test/financial-product.service.spec.ts test/financial-product.controller.spec.ts test/document-core.docx.spec.ts test/document-template.pipeline.spec.ts
+        run: pnpm --filter @fortress-fund/api test:vitest test/financial-product.defaults.spec.ts test/financial-product.service.spec.ts test/financial-product.controller.spec.ts test/document-co[...]
 
       - name: Run ledger immutability checkpoint tests
         run: pnpm --filter @fortress-fund/api test -- --runInBand ledger-immutability.integration.spec.ts
